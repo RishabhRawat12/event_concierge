@@ -1,0 +1,122 @@
+[
+  {
+    "id": "e1",
+    "name": "AI & Future of Work Keynote",
+    "topic": "AI",
+    "latitude": 37.784261,
+    "longitude": -122.401344,
+    "address": "Moscone South, SF"
+  },
+  {
+    "id": "e2",
+    "name": "Cloud Native Architecture Deep Dive",
+    "topic": "Cloud",
+    "latitude": 37.784860,
+    "longitude": -122.400249,
+    "address": "Moscone North, SF"
+  },
+  {
+    "id": "e3",
+    "name": "Startup Pitch Competition",
+    "topic": "Startups",
+    "latitude": 37.782800,
+    "longitude": -122.404200,
+    "address": "Yerba Buena Center for the Arts"
+  },
+  {
+    "id": "e4",
+    "name": "Developer Tooling Showcase",
+    "topic": "DevTools",
+    "latitude": 37.785200,
+    "longitude": -122.399500,
+    "address": "St. Regis San Francisco"
+  },
+  {
+    "id": "e5",
+    "name": "Serverless Data Engineering",
+    "topic": "Data",
+    "latitude": 37.783600,
+    "longitude": -122.399600,
+    "address": "W San Francisco"
+  },
+  {
+    "id": "e6",
+    "name": "LLM Agents Masterclass",
+    "topic": "AI",
+    "latitude": 37.784261,
+    "longitude": -122.401344,
+    "address": "Moscone South, SF"
+  },
+  {
+    "id": "e7",
+    "name": "Kubernetes the Hard Way",
+    "topic": "Cloud",
+    "latitude": 37.784860,
+    "longitude": -122.400249,
+    "address": "Moscone North, SF"
+  },
+  {
+    "id": "e8",
+    "name": "Founders Mixer",
+    "topic": "Startups",
+    "latitude": 37.786500,
+    "longitude": -122.405300,
+    "address": "Union Square, SF"
+  },
+  {
+    "id": "e9",
+    "name": "Building Resilient Distributed Systems",
+    "topic": "Architecture",
+    "latitude": 37.783600,
+    "longitude": -122.399600,
+    "address": "W San Francisco"
+  },
+  {
+    "id": "e10",
+    "name": "PostgreSQL Performance Tuning",
+    "topic": "Data",
+    "latitude": 37.784860,
+    "longitude": -122.400249,
+    "address": "Moscone North, SF"
+  },
+  {
+    "id": "e11",
+    "name": "Rust for Backend Services",
+    "topic": "DevTools",
+    "latitude": 37.784261,
+    "longitude": -122.401344,
+    "address": "Moscone South, SF"
+  },
+  {
+    "id": "e12",
+    "name": "VC Panel: What We Fund in 2026",
+    "topic": "Startups",
+    "latitude": 37.782800,
+    "longitude": -122.404200,
+    "address": "Yerba Buena Center for the Arts"
+  },
+  {
+    "id": "e13",
+    "name": "Frontend Frameworks Showdown",
+    "topic": "Frontend",
+    "latitude": 37.785200,
+    "longitude": -122.399500,
+    "address": "St. Regis San Francisco"
+  },
+  {
+    "id": "e14",
+    "name": "Ethical AI Principles",
+    "topic": "AI",
+    "latitude": 37.783600,
+    "longitude": -122.399600,
+    "address": "W San Francisco"
+  },
+  {
+    "id": "e15",
+    "name": "GraphQL in Production",
+    "topic": "API",
+    "latitude": 37.786500,
+    "longitude": -122.405300,
+    "address": "Union Square, SF"
+  }
+]

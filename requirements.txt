@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+aiohttp
+redis
+google-genai
+pytest
+pytest-asyncio
+httpx

@@ -1,0 +1,68 @@
+from fastapi import APIRouter, HTTPException
+from schemas.models import UserConstraints, ItineraryResponse
+from services.maps import maps_service
+from services.gemini import gemini_service
+import asyncio
+
+router = APIRouter()
+
+@router.post("/itinerary", response_model=ItineraryResponse)
+async def create_itinerary(constraints: UserConstraints):
+    try:
+        # Filter mock events by topics
+        topics_lower = [t.lower() for t in constraints.preferred_topics]
+        filtered_events = [e for e in gemini_service.mock_events if e['topic'].lower() in topics_lower]
+        
+        # Fallback to all events if no topic matches to prevent empty matrix
+        if not filtered_events:
+            filtered_events = gemini_service.mock_events
+
+        # Build distance matrix (from User -> Events, and Event -> Event)
+        # We build coordinate pairs for the filtered events using a single batch request
+        locations = [{
+            "id": "user", 
+            "name": "User Start Point", 
+            "latitude": constraints.user_location.latitude, 
+            "longitude": constraints.user_location.longitude
+        }]
+        
+        for e in filtered_events:
+            locations.append({
+                "id": e["id"], 
+                "name": e["name"], 
+                "latitude": e["latitude"], 
+                "longitude": e["longitude"]
+            })
+
+        distances = []
+        try:
+            # Gather all combinations with exactly one Maps API call
+            matrix_dict = await maps_service.get_walking_time(locations, locations)
+            
+            for i in range(len(locations)):
+                for j in range(len(locations)):
+                    if i != j:
+                        loc_i = locations[i]
+                        loc_j = locations[j]
+                        key = f"{loc_i['latitude']},{loc_i['longitude']}|{loc_j['latitude']},{loc_j['longitude']}"
+                        if key in matrix_dict:
+                            distances.append(f"From {loc_i['name']} to {loc_j['name']}: {matrix_dict[key]} seconds walking")
+        except Exception as e:
+            # If map call fails, do not completely halt if not desired, 
+            # or just re-raise. We'll implicitly skip populate and let it fallback below.
+            pass
+
+        matrix_info = "\n".join(distances)
+        if not matrix_info:
+            matrix_info = "Distance matrix unavailable. Assume average 600 seconds walking between any two points."
+        
+        # Call Gemini Decision Engine
+        itinerary = await gemini_service.generate_itinerary(constraints, matrix_info)
+        return itinerary
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Internal server error")
