@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from schemas.models import UserConstraints, ItineraryResponse
 from services.maps import maps_service
 from services.gemini import gemini_service
+from services.weather import weather_service
 from utils.redis import cache
 import asyncio
 
@@ -62,9 +63,20 @@ async def create_itinerary(constraints: UserConstraints):
         matrix_info = "\n".join(distances)
         if not matrix_info:
             matrix_info = "Distance matrix unavailable. Assume average 600 seconds walking between any two points."
+
+        # Fetch Weather Context
+        current_weather = "Clear"
+        try:
+            current_weather = await weather_service.get_current_weather(
+                lat=constraints.user_location.latitude,
+                lon=constraints.user_location.longitude
+            )
+        except Exception:
+            pass
         
         # Call Gemini Decision Engine
-        itinerary = await gemini_service.generate_itinerary(constraints, matrix_info)
+        itinerary = await gemini_service.generate_itinerary(constraints, matrix_info, current_weather)
+        itinerary.current_weather = current_weather
         return itinerary
 
     except ValueError as e:

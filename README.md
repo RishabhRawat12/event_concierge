@@ -1,28 +1,35 @@
 # Context-Aware Event Concierge
 
-A highly concurrent, async backend service designed to rapidly generate time-optimized, logically sound event itineraries based on geolocation constraints.
+A highly concurrent, async backend service designed to rapidly generate time-optimized, logically sound event itineraries based on geolocation constraints. By merging physical distance mapping, local environmental conditions, and large language model structured reasoning, it produces a realistic, executable travel plan.
 
 ## Vertical
 Physical Event Experience
 
-## Approach and Logic
-- **FastAPI for High Concurrency:** The core framework is completely async-first, relying on `aiohttp` and native asynchronous context management to process heavy I/O workflows without blocking event loops.
-- **Redis Caching:** We batch query the Google Maps Distance Matrix API to pre-load distance and walking times between user origin points and target events. We aggressively cache these matrix results via an Upstash Cloud Redis connection, massively reducing latency for subsequent overlapping geographical requests.
-- **Gemini API:** We route the validated distances, mocked point of interest event locations, and the user's preferred topics into the Gemini API. Using native structured Pydantic outputs, Gemini computes the optimal layout and returns a conflict-free itinerary formatted strictly as guaranteed JSON.
+## 🌟 Advanced Feature: Real-Time Weather Integration
+Unlike static generators, this concierge queries the OpenWeatherMap API to adapt your day.
+- **Rainy Day Logic:** Automatically prioritizes indoor breakout sessions and adjusts walking buffers to account for slower travel.
+- **Clear Sky Logic:** Encourages outdoor rooftop networking and garden sessions.
+
+## Core Architecture
+- **FastAPI (Async-First):** Relies on `aiohttp` and asynchronous contexts to rapidly process heavy I/O without blocking event loops. Core endpoints are protected by a custom Redis-backed token bucket rate limiter to prevent abuse.
+- **Distance Matrix Caching:** Batches Google Maps Distance Matrix API queries between user origins and event destinations. Responses are aggressively cached via a resilient Upstash Redis mechanism to minimize upstream latency.
+- **Gemini Decision Engine:** All context (spatial geometry, global weather reports, and user parameter constraints) is channeled into the Gemini API. Utilizing native structured outputs, Gemini strictly enforces Pydantic schemas to validate and formulate conflict-free JSON itineraries.
 
 ## Assumptions
-- We assume that the user provides valid geographical coordinates upon requesting an itinerary.
-- We assume that the standard venue walking paths mapped by the Distance API remain valid and ignore random physical bottlenecks (e.g., temporary construction blockades).
+- Geodetic coordinates (Latitude/Longitude) provided by the client are structurally valid.
+- Walking paths returned by standard Map routing engines remain unobstructed, excluding unpredictable construction blockades.
 
 ## Setup Instructions
+
 1. Install project dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 2. Assign your security keys (a `.env` file is also supported):
    ```bash
-   export GEMINI_API_KEY="your-key"
-   export GOOGLE_MAPS_API_KEY="your-key"
+   export GEMINI_API_KEY="your-gemini-key"
+   export GOOGLE_MAPS_API_KEY="your-google-maps-key"
+   export OPENWEATHER_API_KEY="your-open-weather-key"
    export REDIS_URL="your-redis-url"
    ```
 3. Run the application:

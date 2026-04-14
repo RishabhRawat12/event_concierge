@@ -19,4 +19,5 @@ class Event(BaseModel):
     transition_time_seconds: int = Field(..., description="Allocated transition time in seconds based on Maps API distance matrix")
 
 class ItineraryResponse(BaseModel):
+    current_weather: Optional[str] = Field(default=None, description="The prevailing weather during the itinerary calculation")
     itinerary: List[Event] = Field(..., description="Ordered list of events forming the optimal, conflict-free itinerary")

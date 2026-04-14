@@ -14,7 +14,7 @@ class GeminiService:
         with open("mock_events.json", "r") as f:
             self.mock_events = json.load(f)
 
-    async def generate_itinerary(self, constraints: UserConstraints, distance_matrix_info: str) -> ItineraryResponse:
+    async def generate_itinerary(self, constraints: UserConstraints, distance_matrix_info: str, current_weather: str = "Unknown") -> ItineraryResponse:
         """
         Calls Gemini natively with the async client and structured JSON schema response.
         """        
@@ -24,6 +24,11 @@ class GeminiService:
         - User Start Location: Lat: {constraints.user_location.latitude}, Lng: {constraints.user_location.longitude}
         - Time Window: {constraints.start_time} to {constraints.end_time}
         - Preferred Topics: {', '.join(constraints.preferred_topics)}
+        
+        Weather Context:
+        The current weather is '{current_weather}'.
+        If the weather is 'Rain', 'Snow', or 'Storm', prioritize indoor events from the mock list and increase the transition_time_seconds for walking by 50%.
+        If the weather is 'Clear', prioritize outdoor networking sessions.
 
         Here are the available mocked events:
         {json.dumps(self.mock_events, indent=2)}
