@@ -3,7 +3,6 @@ from fastapi.responses import JSONResponse, FileResponse
 import os
 import time
 import uuid
-import google.cloud.logging
 from api.routes import router as itinerary_router, staff_router
 from utils.redis import cache
 import uvicorn
@@ -19,6 +18,7 @@ from typing import AsyncGenerator
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Execute startup logic safely to prevent Cloud Run boot crashes
     try:
+        import google.cloud.logging  # type: ignore
         gcloud_logging_client = google.cloud.logging.Client()
         gcloud_logging_client.setup_logging()
     except Exception as e:

@@ -1,21 +1,66 @@
-import redis
 import os
+import json
+import redis.asyncio as redis
 from .config import settings
+import logging
 
-def get_redis_client():
-    try:
-        # Pull the URL from environment variables
-        redis_url = os.getenv("REDIS_URL", settings.REDIS_URL)
-        
-        # Initialize client with a timeout so it doesn't hang the app
-        client = redis.from_url(
-            redis_url, 
-            decode_responses=True, 
-            socket_connect_timeout=2
-        )
-        return client
-    except Exception as e:
-        print(f"Redis connection failed: {e}")
-        return None
+logger = logging.getLogger(__name__)
 
-redis_client = get_redis_client()
+class AsyncCache:
+    def __init__(self):
+        self.redis_url = os.getenv("REDIS_URL", settings.REDIS_URL)
+        self.client = None
+
+    async def connect(self):
+        try:
+            self.client = redis.from_url(
+                self.redis_url, 
+                decode_responses=True, 
+                socket_connect_timeout=settings.REDIS_TIMEOUT_SECONDS
+            )
+            # Send a pilot ping safely to establish pool immediately
+            await self.client.ping()
+        except Exception as e:
+            logger.warning(f"Redis initialization/connect error (ignoring and acting passively): {e}")
+            self.client = None
+
+    async def close(self):
+        if self.client:
+            try:
+                await self.client.aclose()
+            except Exception:
+                pass
+
+    async def get(self, key):
+        if not self.client:
+            return None
+        try:
+            val = await self.client.get(key)
+            if val:
+                return json.loads(val)
+            return None
+        except Exception:
+            return None
+
+    async def set(self, key, value, ex=None):
+        if not self.client:
+            return
+        try:
+            await self.client.set(key, json.dumps(value), ex=ex)
+        except Exception:
+            pass
+
+    async def is_rate_limited(self, key, capacity=10, refill_rate=1.0):
+        if not self.client:
+            return False
+        try:
+            current = await self.client.incr(key)
+            if current == 1:
+                await self.client.expire(key, 60)
+            if current > capacity:
+                return True
+        except Exception:
+            pass
+        return False
+
+cache = AsyncCache()
