@@ -13,22 +13,29 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Initialize Google Cloud Logging Client natively
-try:
-    gcloud_logging_client = google.cloud.logging.Client()
-    gcloud_logging_client.setup_logging()
-except Exception as e:
-    logger.warning(f"Failed to initialize genuine Google Cloud Logging client (ensure credentials exist): {e}")
-
 from typing import AsyncGenerator
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    # Execute startup logic
-    await cache.connect()
+    # Execute startup logic safely to prevent Cloud Run boot crashes
+    try:
+        gcloud_logging_client = google.cloud.logging.Client()
+        gcloud_logging_client.setup_logging()
+    except Exception as e:
+        logger.warning(f"Failed to initialize genuine Google Cloud Logging client: {e}")
+
+    try:
+        await cache.connect()
+    except Exception as e:
+        logger.error(f"Failed to connect to Redis during startup: {e}")
+        
     yield
+    
     # Execute shutdown logic
-    await cache.close()
+    try:
+        await cache.close()
+    except Exception:
+        pass
 
 app = FastAPI(
     title="Context-Aware Event Concierge",
