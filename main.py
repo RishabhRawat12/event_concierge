@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+import os
 from api.routes import router as itinerary_router
 from utils.redis import cache
 import uvicorn
@@ -9,8 +10,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from typing import AsyncGenerator
+
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Execute startup logic
     await cache.connect()
     yield
@@ -26,9 +29,13 @@ app = FastAPI(
 
 app.include_router(itinerary_router, prefix="/api")
 
+@app.get("/", include_in_schema=False)
+async def serve_index() -> FileResponse:
+    return FileResponse(os.path.join("static", "index.html"))
+
 @app.exception_handler(TimeoutError)
 @app.exception_handler(RedisError)
-async def redis_exception_handler(request: Request, exc: Exception):
+async def redis_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.error(f"Redis Connection Error: {exc}")
     return JSONResponse(
         status_code=503,
@@ -36,7 +43,7 @@ async def redis_exception_handler(request: Request, exc: Exception):
     )
 
 @app.exception_handler(RuntimeError)
-async def upstream_api_exception_handler(request: Request, exc: RuntimeError):
+async def upstream_api_exception_handler(request: Request, exc: RuntimeError) -> JSONResponse:
     logger.error(f"Upstream API Error (Maps/Gemini): {exc}")
     return JSONResponse(
         status_code=502,
@@ -44,7 +51,7 @@ async def upstream_api_exception_handler(request: Request, exc: RuntimeError):
     )
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.error(f"Internal Server Error: {exc}")
     return JSONResponse(
         status_code=500,

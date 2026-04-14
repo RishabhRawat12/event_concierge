@@ -8,7 +8,13 @@ from utils.config import settings
 logger = logging.getLogger(__name__)
 
 class GeminiService:
-    def __init__(self):
+    """
+    A service class responsible for managing connections and prompt matrices injected into the Gemini 1.5 Flash endpoint natively handling structured Pydantic payload generations.
+    """
+    def __init__(self) -> None:
+        """
+        Initializes the service by securely parsing and caching API keys and loading local mock structural event definitions from standard storage.
+        """
         self.api_key = settings.GEMINI_API_KEY
         self.client = genai.Client(api_key=self.api_key)
         with open("mock_events.json", "r") as f:
@@ -16,7 +22,15 @@ class GeminiService:
 
     async def generate_itinerary(self, constraints: UserConstraints, distance_matrix_info: str, current_weather: str = "Unknown") -> ItineraryResponse:
         """
-        Calls Gemini natively with the async client and structured JSON schema response.
+        Calls the Gemini engine natively enforcing strict asynchronous schemas driven by distance paths and weather.
+
+        Args:
+            constraints (UserConstraints): The spatial and timeline definitions generated contextually.
+            distance_matrix_info (str): The precalculated text string layout denoting coordinate transition delays.
+            current_weather (str): Current localized weather string parsed from upstream monitors.
+
+        Returns:
+            ItineraryResponse: A strictly mapped layout of sequence-based events bound to physical parameters.
         """        
         prompt = f"""
         You are an expert Context-Aware Event Concierge. Your task is to generate a time-optimized, conflict-free itinerary.

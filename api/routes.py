@@ -8,14 +8,33 @@ import asyncio
 
 router = APIRouter()
 
-async def rate_limit(request: Request):
+async def rate_limit(request: Request) -> None:
+    """
+    Validates token bucket logic via the Redis Cache connection to rate limit inbound API queries.
+
+    Args:
+        request (Request): Starlette Request parameter passed from router automatically.
+        
+    Returns:
+        None: Executing successfully implies limit unbreached. Raises HTTP 429 otherwise.
+    """
     client_ip = request.client.host if request.client else "unknown"
     is_limited = await cache.is_rate_limited(f"rate_limit:{client_ip}", capacity=10, refill_rate=1.0)
     if is_limited:
         raise HTTPException(status_code=429, detail="Too Many Requests - Rate limit exceeded")
 
 @router.post("/itinerary", response_model=ItineraryResponse, dependencies=[Depends(rate_limit)])
-async def create_itinerary(constraints: UserConstraints):
+async def create_itinerary(constraints: UserConstraints) -> ItineraryResponse:
+    """
+    Endpoint that processes physical geolocations, local weather states, and spatial distances to infer
+    a logically sequenced event itinerary via GenAI endpoints.
+
+    Args:
+        constraints (UserConstraints): Validated incoming configuration parameters submitted via POST.
+
+    Returns:
+        ItineraryResponse: Completed strict JSON itinerary arrays aligned with constraints.
+    """
     try:
         # Filter mock events by topics
         topics_lower = [t.lower() for t in constraints.preferred_topics]

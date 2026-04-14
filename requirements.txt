@@ -8,3 +8,6 @@ google-genai
 pytest
 pytest-asyncio
 httpx
+
+googlemaps==4.10.0
+google-cloud-logging==3.9.0

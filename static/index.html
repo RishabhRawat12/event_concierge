@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Concierge Assessment Platform</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f4f4; color: #111; margin: 2rem; }
+        main { background-color: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+        input[type="text"] { width: 100%; padding: 0.75rem; margin-bottom: 1.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input:focus, button:focus { outline: 3px solid #005fcc; }
+        button { background-color: #005fcc; color: #fff; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <main role="main">
+        <section role="region" aria-labelledby="preferences-title">
+            <h1 id="preferences-title">Configure Your Itinerary</h1>
+            <div aria-live="polite" id="status-feed"></div>
+
+            <form id="preferences-form">
+                <label for="event-preferences">Event Preferences</label>
+                <input 
+                    type="text" 
+                    id="event-preferences" 
+                    name="event_preferences" 
+                    aria-label="Enter comma separated event preferences" 
+                    aria-required="true" 
+                    required 
+                    tabindex="0"
+                    placeholder="e.g. AI, Cloud, Networking">
+                
+                <button type="submit" tabindex="0">Generate Itinerary</button>
+            </form>
+        </section>
+    </main>
+</body>
+</html>
