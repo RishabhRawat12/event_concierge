@@ -45,4 +45,48 @@ class RedisCache:
         if self.redis_client:
             await self.redis_client.close()
 
+    async def is_rate_limited(self, key: str, capacity: int, refill_rate: float) -> bool:
+        """Token bucket rate limiter using Lua script"""
+        if not self.redis_client:
+            return False # Fail open
+        script = """
+        local key = KEYS[1]
+        local capacity = tonumber(ARGV[1])
+        local refill_rate = tonumber(ARGV[2])
+        local now = tonumber(ARGV[3])
+        local requested = 1
+        
+        local bucket = redis.call("HMGET", key, "tokens", "last_refill")
+        local tokens = tonumber(bucket[1])
+        local last_refill = tonumber(bucket[2])
+        
+        if not tokens then
+            tokens = capacity
+            last_refill = now
+        else
+            local time_passed = now - last_refill
+            local new_tokens = time_passed * refill_rate
+            tokens = math.min(capacity, tokens + new_tokens)
+            last_refill = now
+        end
+        
+        if tokens >= requested then
+            tokens = tokens - requested
+            redis.call("HMSET", key, "tokens", tokens, "last_refill", last_refill)
+            redis.call("EXPIRE", key, math.ceil(capacity / refill_rate))
+            return 0
+        else
+            redis.call("HMSET", key, "tokens", tokens, "last_refill", last_refill)
+            redis.call("EXPIRE", key, math.ceil(capacity / refill_rate))
+            return 1
+        end
+        """
+        import time
+        try:
+            result = await self.redis_client.eval(script, 1, key, capacity, refill_rate, time.time())
+            return bool(result)
+        except Exception as e:
+            logger.warning(f"Rate limiter error: {e}")
+            return False
+
 cache = RedisCache()

@@ -1,12 +1,19 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, Request
 from schemas.models import UserConstraints, ItineraryResponse
 from services.maps import maps_service
 from services.gemini import gemini_service
+from utils.redis import cache
 import asyncio
 
 router = APIRouter()
 
-@router.post("/itinerary", response_model=ItineraryResponse)
+async def rate_limit(request: Request):
+    client_ip = request.client.host if request.client else "unknown"
+    is_limited = await cache.is_rate_limited(f"rate_limit:{client_ip}", capacity=10, refill_rate=1.0)
+    if is_limited:
+        raise HTTPException(status_code=429, detail="Too Many Requests - Rate limit exceeded")
+
+@router.post("/itinerary", response_model=ItineraryResponse, dependencies=[Depends(rate_limit)])
 async def create_itinerary(constraints: UserConstraints):
     try:
         # Filter mock events by topics
@@ -62,7 +69,5 @@ async def create_itinerary(constraints: UserConstraints):
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal server error")
+    # We let RuntimeError (Maps/Gemini failure) and general Exception bubble up 
+    # to be caught by the global exception handlers in main.py.
