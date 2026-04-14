@@ -1,7 +1,10 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse
 import os
-from api.routes import router as itinerary_router
+import time
+import uuid
+import google.cloud.logging
+from api.routes import router as itinerary_router, staff_router
 from utils.redis import cache
 import uvicorn
 from contextlib import asynccontextmanager
@@ -9,6 +12,13 @@ from redis.exceptions import TimeoutError, RedisError
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Initialize Google Cloud Logging Client natively
+try:
+    gcloud_logging_client = google.cloud.logging.Client()
+    gcloud_logging_client.setup_logging()
+except Exception as e:
+    logger.warning(f"Failed to initialize genuine Google Cloud Logging client (ensure credentials exist): {e}")
 
 from typing import AsyncGenerator
 
@@ -28,6 +38,7 @@ app = FastAPI(
 )
 
 app.include_router(itinerary_router, prefix="/api")
+app.include_router(staff_router, prefix="/api/staff", tags=["Staff Action Orchestration"])
 
 @app.get("/", include_in_schema=False)
 async def serve_index() -> FileResponse:
@@ -52,10 +63,17 @@ async def upstream_api_exception_handler(request: Request, exc: RuntimeError) ->
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.error(f"Internal Server Error: {exc}")
+    trace_id = str(uuid.uuid4())
+    timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    logger.error(f"trace_id={trace_id} | Internal Server Error: {exc}")
     return JSONResponse(
         status_code=500,
-        content={"error": "Internal Server Error", "message": "An unexpected error occurred."}
+        content={
+            "status": "error",
+            "message": "Internal Server Error",
+            "trace_id": trace_id,
+            "timestamp": timestamp
+        }
     )
 
 if __name__ == "__main__":

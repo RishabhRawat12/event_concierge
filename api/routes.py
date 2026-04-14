@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
-from schemas.models import UserConstraints, ItineraryResponse
+from schemas.models import UserConstraints, ItineraryResponse, StaffActionRequest, StaffActionResponse
 from services.maps import maps_service
 from services.gemini import gemini_service
 from services.weather import weather_service
@@ -102,3 +102,16 @@ async def create_itinerary(constraints: UserConstraints) -> ItineraryResponse:
         raise HTTPException(status_code=400, detail=str(e))
     # We let RuntimeError (Maps/Gemini failure) and general Exception bubble up 
     # to be caught by the global exception handlers in main.py.
+
+staff_router = APIRouter()
+
+@staff_router.post("/zone-action", response_model=StaffActionResponse)
+async def trigger_staff_action(request: StaffActionRequest) -> StaffActionResponse:
+    """
+    Triggers an emergency or actionable alert context for staff to resolve based on GenAI metrics.
+    """
+    try:
+        response = await gemini_service.generate_staff_protocol(request.zone_id, request.alert_type)
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

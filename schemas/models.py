@@ -21,3 +21,10 @@ class Event(BaseModel):
 class ItineraryResponse(BaseModel):
     current_weather: Optional[str] = Field(default=None, description="The prevailing weather during the itinerary calculation")
     itinerary: List[Event] = Field(..., description="Ordered list of events forming the optimal, conflict-free itinerary")
+
+class StaffActionRequest(BaseModel):
+    zone_id: str = Field(..., description="The unique identifier for the targeted Zone (e.g. Zone B)")
+    alert_type: str = Field(..., description="The categorical metric anomaly driving the alert (e.g. Crowd Density)")
+
+class StaffActionResponse(BaseModel):
+    protocol: str = Field(..., description="The AI-orchestrated response protocol for personnel deployment")

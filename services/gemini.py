@@ -3,7 +3,8 @@ import logging
 import asyncio
 from google import genai
 from google.genai import types
-from schemas.models import ItineraryResponse, UserConstraints, Event
+from schemas.models import ItineraryResponse, UserConstraints, Event, StaffActionRequest, StaffActionResponse
+from typing import Optional, Union, List, Dict
 from utils.config import settings
 
 logger = logging.getLogger(__name__)
@@ -15,23 +16,35 @@ class GeminiService:
     def __init__(self) -> None:
         """
         Initializes the service by securely parsing and caching API keys and loading local mock structural event definitions from standard storage.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            FileNotFoundError: If the mock_events.json mapping file is missing.
         """
         self.api_key = settings.GEMINI_API_KEY
         self.client = genai.Client(api_key=self.api_key)
         with open("mock_events.json", "r") as f:
             self.mock_events = json.load(f)
 
-    async def generate_itinerary(self, constraints: UserConstraints, distance_matrix_info: str, current_weather: str = "Unknown") -> ItineraryResponse:
+    async def generate_itinerary(self, constraints: UserConstraints, distance_matrix_info: str, current_weather: Optional[str] = "Unknown") -> ItineraryResponse:
         """
         Calls the Gemini engine natively enforcing strict asynchronous schemas driven by distance paths and weather.
 
         Args:
             constraints (UserConstraints): The spatial and timeline definitions generated contextually.
             distance_matrix_info (str): The precalculated text string layout denoting coordinate transition delays.
-            current_weather (str): Current localized weather string parsed from upstream monitors.
+            current_weather (Optional[str]): Current localized weather string parsed from upstream monitors.
 
         Returns:
             ItineraryResponse: A strictly mapped layout of sequence-based events bound to physical parameters.
+
+        Raises:
+            Exception: Managed internally; yields fallback itinerary upon consecutive failures.
         """        
         prompt = f"""
         You are an expert Context-Aware Event Concierge. Your task is to generate a time-optimized, conflict-free itinerary.
@@ -97,5 +110,53 @@ class GeminiService:
                             )
                         ]
                     )
+
+    async def generate_staff_protocol(self, zone_id: str, alert_type: str) -> StaffActionResponse:
+        """
+        Generates an actionable staff protocol based on a specific zone and structural alert metric.
+
+        Args:
+            zone_id (str): The unique identifier for the targeted Zone (e.g. Zone B).
+            alert_type (str): The categorical metric anomaly driving the alert (e.g. Crowd Density).
+
+        Returns:
+            StaffActionResponse: A strict Pydantic model defining the generated action protocol.
+
+        Raises:
+            RuntimeError: If the Gemini API fails entirely to generate the staff protocol.
+        """
+        prompt = f"""
+        You are the Head of Event Security and Orchestration.
+        An emergency/actionable alert has been triggered:
+        - Zone: {zone_id}
+        - Alert Type: {alert_type}
+        
+        Generate a concise, direct operational protocol for deployed staff to immediately resolve the situation. 
+        Format your response to match the exact schema explicitly.
+        """
+        
+        max_retries = 3
+        base_delay = 1.0
+
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.aio.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=StaffActionResponse,
+                        temperature=0.0
+                    )
+                )
+                return StaffActionResponse.model_validate_json(response.text)
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Gemini API attempt {attempt + 1} failed for protocol: {e}. Retrying in {base_delay}s...")
+                    await asyncio.sleep(base_delay)
+                    base_delay *= 2
+                else:
+                    logger.error(f"Gemini API failure after {max_retries} attempts generating protocol: {e}")
+                    raise RuntimeError(f"Failed to generate staff protocol with Gemini API: {e}")
 
 gemini_service = GeminiService()
