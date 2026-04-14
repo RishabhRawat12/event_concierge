@@ -1,5 +1,6 @@
 import json
 import logging
+import asyncio
 from google import genai
 from google.genai import types
 from schemas.models import ItineraryResponse, UserConstraints, Event
@@ -56,36 +57,45 @@ class GeminiService:
         Return the itinerary as strict JSON conforming exactly to the requested schema. Do not output any markdown formatting, only raw JSON.
         """
         
-        try:
-            response = await self.client.aio.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=ItineraryResponse,
-                    temperature=0.0
-                )
-            )
-            return ItineraryResponse.model_validate_json(response.text)
-        except Exception as e:
-            logger.error(f"Gemini API failure: {e}")
-            return ItineraryResponse(
-                itinerary=[
-                    Event(
-                        event_name="AI & Future of Work Keynote (Fallback)",
-                        start_time="09:00 AM",
-                        end_time="10:00 AM",
-                        walking_directions="Proceed to the main hall. (Generated via offline fallback due to high API demand).",
-                        transition_time_seconds=300
-                    ),
-                    Event(
-                        event_name="Networking Lunch (Fallback)",
-                        start_time="12:00 PM",
-                        end_time="01:00 PM",
-                        walking_directions="Walk to the cafeteria.",
-                        transition_time_seconds=300
+        max_retries = 3
+        base_delay = 1.0
+
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.aio.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=ItineraryResponse,
+                        temperature=0.0
                     )
-                ]
-            )
+                )
+                return ItineraryResponse.model_validate_json(response.text)
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Gemini API attempt {attempt + 1} failed: {e}. Retrying in {base_delay}s...")
+                    await asyncio.sleep(base_delay)
+                    base_delay *= 2
+                else:
+                    logger.error(f"Gemini API failure after {max_retries} attempts: {e}")
+                    return ItineraryResponse(
+                        itinerary=[
+                            Event(
+                                event_name="AI & Future of Work Keynote (Fallback)",
+                                start_time="09:00 AM",
+                                end_time="10:00 AM",
+                                walking_directions="Proceed to the main hall. (Generated via offline fallback due to high API demand).",
+                                transition_time_seconds=300
+                            ),
+                            Event(
+                                event_name="Networking Lunch (Fallback)",
+                                start_time="12:00 PM",
+                                end_time="01:00 PM",
+                                walking_directions="Walk to the cafeteria.",
+                                transition_time_seconds=300
+                            )
+                        ]
+                    )
 
 gemini_service = GeminiService()
