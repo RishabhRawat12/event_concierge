@@ -1,10 +1,22 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Security
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from schemas.models import UserConstraints, ItineraryResponse, StaffActionRequest, StaffActionResponse
 from services.maps import maps_service
 from services.gemini import gemini_service
 from services.weather import weather_service
 from utils.redis import cache
+from utils.websockets import ws_manager
+from utils.config import settings
 import asyncio
+import json
+
+security = HTTPBearer()
+
+def verify_staff_token(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
+    # Simulating simple RBAC verification against a deterministic token
+    if credentials.credentials != "SUPER_SECRET_STAFF_TOKEN":
+        raise HTTPException(status_code=403, detail="Forbidden: Invalid staff authentication token.")
+    return credentials.credentials
 
 router = APIRouter()
 
@@ -18,7 +30,11 @@ async def rate_limit(request: Request) -> None:
     Returns:
         None: Executing successfully implies limit unbreached. Raises HTTP 429 otherwise.
     """
-    client_ip = request.client.host if request.client else "unknown"
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+    else:
+        client_ip = request.client.host if request.client else "unknown"
     is_limited = await cache.is_rate_limited(f"rate_limit:{client_ip}", capacity=10, refill_rate=1.0)
     if is_limited:
         raise HTTPException(status_code=429, detail="Too Many Requests - Rate limit exceeded")
@@ -103,15 +119,27 @@ async def create_itinerary(constraints: UserConstraints) -> ItineraryResponse:
     # We let RuntimeError (Maps/Gemini failure) and general Exception bubble up 
     # to be caught by the global exception handlers in main.py.
 
+@router.get("/config/maps", include_in_schema=False)
+async def get_maps_config() -> dict:
+    return {"maps_key": settings.GOOGLE_MAPS_API_KEY, "events": gemini_service.mock_events}
+
 staff_router = APIRouter()
 
-@staff_router.post("/zone-action", response_model=StaffActionResponse)
+@staff_router.post("/zone-action", response_model=StaffActionResponse, dependencies=[Depends(verify_staff_token)])
 async def trigger_staff_action(request: StaffActionRequest) -> StaffActionResponse:
     """
     Triggers an emergency or actionable alert context for staff to resolve based on GenAI metrics.
     """
     try:
         response = await gemini_service.generate_staff_protocol(request.zone_id, request.alert_type)
+        
+        # Dispatch the AI resolution instantly across all connected administrative UI tunnels (WebSockets)
+        await ws_manager.broadcast(json.dumps({
+            "zone_id": request.zone_id,
+            "alert_type": request.alert_type,
+            "protocol": response.protocol
+        }))
+        
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal server error while generating staff protocol.")

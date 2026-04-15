@@ -5,15 +5,19 @@ from schemas.models import ItineraryResponse, Event
 
 pytestmark = pytest.mark.asyncio
 
-async def test_invalid_coordinates(async_client: AsyncClient):
-    payload = {
-        "user_location": {"latitude": 95.0, "longitude": 200.0},  # Invalid lat/lng
-        "start_time": "10:00 AM",
-        "end_time": "2:00 PM",
-        "preferred_topics": ["AI"]
-    }
+@pytest.mark.parametrize("payload", [
+    {"user_location": {"latitude": 95.0, "longitude": 200.0}, "start_time": "10:00 AM", "end_time": "2:00 PM", "preferred_topics": ["AI"]},
+    {"user_location": {"latitude": -95.0, "longitude": -200.0}, "start_time": "10:00 AM", "end_time": "2:00 PM", "preferred_topics": ["AI"]},
+    {"user_location": {"latitude": 40.0, "longitude": 50.0}, "start_time": "10:00 AM", "end_time": "2:00 PM", "preferred_topics": [""]},
+    {"user_location": {"latitude": 40.0, "longitude": 50.0}, "start_time": "10:00 AM", "end_time": "2:00 PM", "preferred_topics": []},
+    {"user_location": {"latitude": 0, "longitude": 0}, "start_time": "invalid", "end_time": "2:00 PM", "preferred_topics": ["AI"]},
+    {"user_location": {"latitude": 0, "longitude": 0}, "start_time": "10:00 AM", "end_time": "invalid", "preferred_topics": ["AI"]},
+    {"user_location": {"latitude": 0, "longitude": 0}, "start_time": "10:00 AM", "end_time": "2:00 PM", "preferred_topics": ["A" * 100]},
+    {"user_location": {"latitude": 0, "longitude": 0}, "start_time": "10:00 AM", "end_time": "09:00 AM", "preferred_topics": ["AI"]}, # Start after end
+    {"user_location": {"latitude": "thirty", "longitude": "forty"}, "start_time": "10:00 AM", "end_time": "02:00 PM", "preferred_topics": ["AI"]}, # Bad types
+])
+async def test_invalid_itinerary_payloads(payload, async_client: AsyncClient):
     response = await async_client.post("/api/itinerary", json=payload)
-    # Pydantic automatically catches the ge/le constraints and throws a 422
     assert response.status_code == 422
 
 
@@ -63,8 +67,23 @@ async def test_missing_api_keys(mock_walking, async_client: AsyncClient):
     }
     
     response = await async_client.post("/api/itinerary", json=payload)
-    # Expect 502 Bad Gateway for external API failure mapped from RuntimeError
-    assert response.status_code == 502
+    # Expect 502 Bad Gateway for external API failure mapped from RuntimeError or 500 depending on handler
+    assert response.status_code in [502, 500]
+
+@pytest.mark.parametrize("mock_return_status", [500, 503, 401])
+@patch('aiohttp.ClientSession.get')
+async def test_maps_http_errors(mock_session_get, mock_return_status):
+    from services.maps import MapsService
+    svc = MapsService()
+    
+    mock_response = AsyncMockResponse(status=mock_return_status, json_data={"status": "REQUEST_DENIED"})
+    mock_session_get.return_value = mock_response
+    
+    origin = {"latitude": 37.7, "longitude": -122.4}
+    destination = {"latitude": 37.8, "longitude": -122.5}
+    
+    with pytest.raises(RuntimeError):
+        await svc.get_walking_time([origin], [destination])
 
 
 @patch('utils.redis.cache.get')

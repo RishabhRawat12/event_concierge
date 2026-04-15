@@ -26,53 +26,55 @@ class MapsService:
         self.gmaps_client = googlemaps.Client(key=self.api_key)
 
     async def get_walking_time(self, origins: List[Dict[str, float]], destinations: List[Dict[str, float]]) -> Dict[str, int]:
-        """
-        Returns a dictionary mapping 'lat,lng|lat,lng' origin-destination string pairs to transition time in seconds.
-        Utilizes caching and exponential backoff retry logic alongside the official maps Python package.
+        import hashlib
+        import json
 
-        Args:
-            origins (List[Dict[str, float]]): The starting spatial coordinates for the matrix dimension.
-            destinations (List[Dict[str, float]]): The target spatial coordinates for the matrix dimension.
-
-        Returns:
-            Dict[str, int]: A flattened dictionary defining explicit walking delays.
-
-        Raises:
-            RuntimeError: If the Google Maps API inherently fails to return the required transition dictionary safely.
-        """
         origins_list = [f"{loc['latitude']},{loc['longitude']}" for loc in origins]
         dest_list = [f"{loc['latitude']},{loc['longitude']}" for loc in destinations]
         
-        cache_key = f"maps:walking:batch:{hash(str(origins_list))}:{hash(str(dest_list))}"
+        # Security & Efficiency: Use deterministic SHA256 instead of native volatile hash()
+        h_orig = hashlib.sha256(json.dumps(origins_list).encode()).hexdigest()
+        h_dest = hashlib.sha256(json.dumps(dest_list).encode()).hexdigest()
+        cache_key = f"maps:walking:batch:{h_orig}:{h_dest}"
+        
         cached_val = await cache.get(cache_key)
         if cached_val is not None:
             return cached_val
 
         max_retries = 3
         base_delay = 1.0
-        result_matrix = {}
 
-        def _fetch_matrix() -> Dict:
-            return self.gmaps_client.distance_matrix(origins_list, dest_list, mode="walking")
+        def _fetch_matrix_all() -> Dict[str, int]:
+            combined_matrix = {}
+            # API constraint: origins x destinations <= 100 elements. 10x10 chunking.
+            for i in range(0, len(origins_list), 10):
+                o_chunk = origins_list[i:i+10]
+                o_raw = origins[i:i+10]
+                for j in range(0, len(dest_list), 10):
+                    d_chunk = dest_list[j:j+10]
+                    d_raw = destinations[j:j+10]
+                    
+                    data = self.gmaps_client.distance_matrix(o_chunk, d_chunk, mode="walking")
+                    if data.get("status") == "OK":
+                        rows = data.get("rows", [])
+                        for r_idx, row in enumerate(rows):
+                            orig = o_raw[r_idx]
+                            orig_key = f"{orig['latitude']},{orig['longitude']}"
+                            for e_idx, element in enumerate(row.get("elements", [])):
+                                dest = d_raw[e_idx]
+                                dest_key = f"{dest['latitude']},{dest['longitude']}"
+                                if element.get("status") == "OK":
+                                    duration_val = element["duration"]["value"]
+                                    combined_matrix[f"{orig_key}|{dest_key}"] = duration_val
+                    else:
+                        raise RuntimeError(f"Maps API response not OK: {data}")
+            return combined_matrix
 
         for attempt in range(max_retries):
             try:
-                data = await asyncio.to_thread(_fetch_matrix)
-                if data.get("status") == "OK":
-                    rows = data.get("rows", [])
-                    for i, row in enumerate(rows):
-                        orig = origins[i]
-                        orig_key = f"{orig['latitude']},{orig['longitude']}"
-                        for j, element in enumerate(row.get("elements", [])):
-                            dest = destinations[j]
-                            dest_key = f"{dest['latitude']},{dest['longitude']}"
-                            if element.get("status") == "OK":
-                                duration = element["duration"]["value"]
-                                result_matrix[f"{orig_key}|{dest_key}"] = duration
-                    
-                    await cache.set(cache_key, result_matrix, ex=600)  # TTL 10 mins
-                    return result_matrix
-                logger.warning(f"Maps API response not OK: {data}")
+                result_matrix = await asyncio.to_thread(_fetch_matrix_all)
+                await cache.set(cache_key, result_matrix, ex=600)  # TTL 10 mins
+                return result_matrix
             except Exception as e:
                 logger.error(f"Maps API request failed on attempt {attempt+1}: {e}")
             

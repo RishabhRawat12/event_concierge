@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Event Concierge Assessment Platform</title>
     <style>
-        body { font-family: sans-serif; background-color: #f4f4f4; color: #111; margin: 2rem; }
-        main { background-color: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
+        body { font-family: sans-serif; background-color: #f4f4f4; color: #111; margin: 2rem; display: flex; gap: 2rem; flex-wrap: wrap;}
+        main { background-color: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 400px; flex-shrink:0; }
+        #map-container { flex-grow: 1; min-width: 300px; height: 80vh; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; background: #ddd;}
         label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
         input[type="text"] { width: 100%; padding: 0.75rem; margin-bottom: 1.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         input:focus, button:focus { outline: 3px solid #005fcc; }
         button { background-color: #005fcc; color: #fff; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .staff-btn { background-color: #d32f2f; margin-top: 1rem;}
     </style>
 </head>
 <body>
@@ -35,12 +37,124 @@
         </section>
 
         <section id="staff-ui" role="region" aria-label="Staff Management Dashboard" style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #ddd;">
-            <h2>Staff Dashboard</h2>
-            <div aria-live="assertive" id="mock-crowd-alert" style="background-color: #ffeb3b; padding: 1rem; border-left: 5px solid #d32f2f; margin-bottom: 1rem;">
-                <strong>Warning:</strong> High Crowd Density detected in Zone B. Weather Alert Level elevated.
+            <h2>Live Staff Dashboard (WebSocket)</h2>
+            <div aria-live="assertive" id="mock-crowd-alert" style="background-color: #ffeb3b; padding: 1rem; border-left: 5px solid #d32f2f; margin-bottom: 1rem; font-size: 0.9em;">
+                Waiting for backend WebSocket events...
             </div>
-            <button type="button">Acknowledge</button>
+            <button type="button" class="staff-btn" id="trigger-staff-btn">Trigger Secure Staff Alert</button>
         </section>
     </main>
+
+    <div id="map-container" aria-label="Live Event Map Integration"></div>
+
+    <script>
+        let map;
+
+        async function initApp() {
+            try {
+                // Safely load secrets via Config API
+                const configRes = await fetch('/api/config/maps');
+                const config = await configRes.json();
+                
+                // Inject Google Maps SDK Dynamically
+                const script = document.createElement('script');
+                script.src = `https://maps.googleapis.com/maps/api/js?key=${config.maps_key}&callback=initMap`;
+                script.async = true;
+                script.defer = true;
+                window.initMap = () => {
+                    map = new google.maps.Map(document.getElementById("map-container"), {
+                        center: { lat: 37.784, lng: -122.401 },
+                        zoom: 15,
+                    });
+                    // Plot Markers dynamically
+                    config.events.forEach(evt => {
+                        new google.maps.Marker({
+                            position: { lat: evt.latitude, lng: evt.longitude },
+                            map,
+                            title: evt.name,
+                        });
+                    });
+                };
+                document.head.appendChild(script);
+            } catch (err) {
+                console.error("Failed to load map config", err);
+            }
+            
+            // Connect WebSocket
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            ws.onmessage = (event) => {
+                const alertData = JSON.parse(event.data);
+                const statusBox = document.getElementById('mock-crowd-alert');
+                statusBox.innerHTML = `
+                    <strong style="color:#d32f2f">CRITICAL: [${alertData.zone_id}] - ${alertData.alert_type}</strong><br/>
+                    <strong style="color:green">AI Resolution Protocol:</strong> ${alertData.protocol}
+                `;
+            };
+        }
+        
+        initApp();
+
+        document.getElementById('preferences-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const topicsInput = document.getElementById('event-preferences').value;
+            const topics = topicsInput.split(',').map(t => t.trim()).filter(t => t);
+            
+            const payload = {
+                user_location: { latitude: 37.784261, longitude: -122.401344 },
+                start_time: "09:00 AM",
+                end_time: "05:00 PM",
+                preferred_topics: topics.length > 0 ? topics : ["AI"]
+            };
+
+            const statusFeed = document.getElementById('status-feed');
+            statusFeed.innerHTML = "<p><em>Generating optimal itinerary...</em></p>";
+
+            try {
+                const response = await fetch('/api/itinerary', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error(`API ${response.status}`);
+                const data = await response.json();
+                
+                let html = `<h3>Weather Context: ${data.current_weather || 'Unknown'}</h3>`;
+                data.itinerary.forEach(evt => {
+                    html += `
+                        <div style="margin-top: 1rem; margin-bottom: 1rem; border-left: 4px solid #005fcc; padding-left: 1rem;">
+                            <strong>${evt.event_name}</strong><br/>
+                            <small>${evt.start_time} - ${evt.end_time} (${evt.transition_time_seconds}s walk)</small><br/>
+                            <em>${evt.walking_directions}</em>
+                        </div>
+                    `;
+                });
+                statusFeed.innerHTML = html;
+            } catch (err) {
+                statusFeed.innerHTML = `<p style="color:red"><strong>Failed:</strong> ${err.message}</p>`;
+            }
+        });
+
+        document.getElementById('trigger-staff-btn').addEventListener('click', async () => {
+            const statusBox = document.getElementById('mock-crowd-alert');
+            statusBox.innerHTML = "<em>Sending secure alert via token auth...</em>";
+            try {
+                const response = await fetch('/api/staff/zone-action', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer SUPER_SECRET_STAFF_TOKEN'
+                    },
+                    body: JSON.stringify({ zone_id: "Main Gate", alert_type: "Access Control Bottleneck" })
+                });
+                
+                if (!response.ok) throw new Error(`Staff Server Error: ${response.status}`);
+                // UI updates naturally via the WebSocket Broadcast payload!
+            } catch (err) {
+                statusBox.innerHTML = `<strong style="color:red">Failed Auth / Push:</strong> ${err.message}`;
+            }
+        });
+    </script>
 </body>
 </html>

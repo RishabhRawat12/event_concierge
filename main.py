@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
@@ -7,10 +7,13 @@ import time
 import uuid
 from api.routes import router as itinerary_router, staff_router
 from utils.redis import cache
+from utils.websockets import ws_manager
 import uvicorn
 from contextlib import asynccontextmanager
 from redis.exceptions import TimeoutError, RedisError
 import logging
+import aiohttp
+from services.weather import weather_service
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +34,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.error(f"Failed to connect to Redis during startup: {e}")
         
+    weather_service.session = aiohttp.ClientSession()
+        
     yield
     
     # Execute shutdown logic
+    if getattr(weather_service, 'session', None):
+        await weather_service.session.close()
+        
     try:
         await cache.close()
     except Exception:
@@ -56,7 +64,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost", "http://localhost:8000", "http://localhost:8080"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -103,6 +111,15 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
         },
         headers={"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY"}
     )
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket) -> None:
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
