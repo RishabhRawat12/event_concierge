@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 import os
 import time
@@ -44,6 +46,22 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(itinerary_router, prefix="/api")
 app.include_router(staff_router, prefix="/api/staff", tags=["Staff Action Orchestration"])
 
@@ -57,7 +75,8 @@ async def redis_exception_handler(request: Request, exc: Exception) -> JSONRespo
     logger.error(f"Redis Connection Error: {exc}")
     return JSONResponse(
         status_code=503,
-        content={"error": "Service Unavailable", "message": "Cache/Database connection timeout."}
+        content={"error": "Service Unavailable", "message": "Cache/Database connection timeout."},
+        headers={"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY"}
     )
 
 @app.exception_handler(RuntimeError)
@@ -65,7 +84,8 @@ async def upstream_api_exception_handler(request: Request, exc: RuntimeError) ->
     logger.error(f"Upstream API Error (Maps/Gemini): {exc}")
     return JSONResponse(
         status_code=502,
-        content={"error": "Bad Gateway", "message": "An upstream API failed to process the request."}
+        content={"error": "Bad Gateway", "message": "An upstream API failed to process the request."},
+        headers={"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY"}
     )
 
 @app.exception_handler(Exception)
@@ -80,7 +100,8 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
             "message": "Internal Server Error",
             "trace_id": trace_id,
             "timestamp": timestamp
-        }
+        },
+        headers={"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY"}
     )
 
 if __name__ == "__main__":

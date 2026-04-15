@@ -1,17 +1,18 @@
 import os
 import json
 import redis.asyncio as redis
+from typing import Any, Optional
 from .config import settings
 import logging
 
 logger = logging.getLogger(__name__)
 
 class AsyncCache:
-    def __init__(self):
+    def __init__(self) -> None:
         self.redis_url = os.getenv("REDIS_URL", settings.REDIS_URL)
         self.client = None
 
-    async def connect(self):
+    async def connect(self) -> None:
         try:
             self.client = redis.from_url(
                 self.redis_url, 
@@ -24,14 +25,14 @@ class AsyncCache:
             logger.warning(f"Redis initialization/connect error (ignoring and acting passively): {e}")
             self.client = None
 
-    async def close(self):
+    async def close(self) -> None:
         if self.client:
             try:
                 await self.client.aclose()
             except Exception:
                 pass
 
-    async def get(self, key):
+    async def get(self, key: str) -> Optional[Any]:
         if not self.client:
             return None
         try:
@@ -42,7 +43,7 @@ class AsyncCache:
         except Exception:
             return None
 
-    async def set(self, key, value, ex=None):
+    async def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
         if not self.client:
             return
         try:
@@ -50,7 +51,7 @@ class AsyncCache:
         except Exception:
             pass
 
-    async def is_rate_limited(self, key, capacity=10, refill_rate=1.0):
+    async def is_rate_limited(self, key: str, capacity: int = 10, refill_rate: float = 1.0) -> bool:
         if not self.client:
             return False
         try:

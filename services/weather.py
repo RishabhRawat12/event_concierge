@@ -5,7 +5,7 @@ from utils.config import settings
 logger = logging.getLogger(__name__)
 
 class WeatherService:
-    def __init__(self):
+    def __init__(self) -> None:
         self.api_key = settings.OPENWEATHER_API_KEY
         self.base_url = "https://api.openweathermap.org/data/2.5/weather"
 
