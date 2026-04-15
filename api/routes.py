@@ -1,4 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Request, Security
+import logging
+
+logger = logging.getLogger(__name__)
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from schemas.models import UserConstraints, ItineraryResponse, StaffActionRequest, StaffActionResponse
 from services.maps import maps_service
