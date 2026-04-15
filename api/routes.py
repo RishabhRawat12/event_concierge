@@ -114,4 +114,4 @@ async def trigger_staff_action(request: StaffActionRequest) -> StaffActionRespon
         response = await gemini_service.generate_staff_protocol(request.zone_id, request.alert_type)
         return response
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while generating staff protocol.")

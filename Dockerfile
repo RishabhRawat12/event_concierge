@@ -14,5 +14,9 @@ COPY . .
 # Expose the port Cloud Run expects
 EXPOSE 8080
 
+# Run as a non-root user for security compliance
+RUN useradd -m appuser && chown -R appuser:appuser /app
+USER appuser
+
 # Run the FastAPI application using Uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

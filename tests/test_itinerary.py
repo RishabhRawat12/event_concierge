@@ -70,7 +70,7 @@ async def test_missing_api_keys(mock_walking, async_client: AsyncClient):
 @patch('utils.redis.cache.get')
 @patch('utils.redis.cache.set')
 @patch('aiohttp.ClientSession.get')
-async def _test_cache_hit_vs_miss_behavior(mock_session_get, mock_cache_set, mock_cache_get):
+async def test_cache_hit_vs_miss_behavior(mock_session_get, mock_cache_set, mock_cache_get):
     from services.maps import MapsService
     svc = MapsService()
     
