@@ -76,7 +76,7 @@ class GeminiService:
         for attempt in range(max_retries):
             try:
                 response = await self.client.aio.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-flash-latest',
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
@@ -141,7 +141,7 @@ class GeminiService:
         for attempt in range(max_retries):
             try:
                 response = await self.client.aio.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-flash-latest',
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",

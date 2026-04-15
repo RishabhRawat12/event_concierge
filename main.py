@@ -23,11 +23,12 @@ from typing import AsyncGenerator
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Execute startup logic safely to prevent Cloud Run boot crashes
     try:
-        import google.cloud.logging  # type: ignore
-        gcloud_logging_client = google.cloud.logging.Client()
-        gcloud_logging_client.setup_logging()
-    except Exception as e:
-        logger.warning(f"Failed to initialize genuine Google Cloud Logging client: {e}")
+        if os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or os.getenv("GOOGLE_CLOUD_PROJECT"):
+            import google.cloud.logging  # type: ignore
+            gcloud_logging_client = google.cloud.logging.Client()
+            gcloud_logging_client.setup_logging()
+    except Exception:
+        pass
 
     try:
         await cache.connect()

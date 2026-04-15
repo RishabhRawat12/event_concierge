@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional
+from pydantic import BaseModel, Field, StringConstraints
+from typing import List, Optional, Annotated
 
 class Coordinates(BaseModel):
     latitude: float = Field(..., ge=-90, le=90, description="Latitude of the location")
@@ -7,9 +7,9 @@ class Coordinates(BaseModel):
 
 class UserConstraints(BaseModel):
     user_location: Coordinates
-    start_time: str = Field(..., description="Start time in ISO format or descriptive string")
-    end_time: str = Field(..., description="End time in ISO format or descriptive string")
-    preferred_topics: List[str] = Field(..., description="List of preferred topics (e.g. AI, Cloud, Startups)")
+    start_time: str = Field(..., min_length=5, max_length=50, description="Start time (e.g. 10:00 AM)")
+    end_time: str = Field(..., min_length=5, max_length=50, description="End time (e.g. 05:00 PM)")
+    preferred_topics: List[str] = Field(..., min_length=1, description="List of preferred topics")
 
 class Event(BaseModel):
     event_name: str = Field(..., description="Name of the chosen event from the static mock events list")

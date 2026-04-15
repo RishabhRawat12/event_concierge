@@ -5,79 +5,119 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Event Concierge Assessment Platform</title>
     <style>
-        body { font-family: sans-serif; background-color: #f4f4f4; color: #111; margin: 2rem; display: flex; gap: 2rem; flex-wrap: wrap;}
-        main { background-color: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 400px; flex-shrink:0; }
-        #map-container { flex-grow: 1; min-width: 300px; height: 80vh; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; background: #ddd;}
-        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
-        input[type="text"] { width: 100%; padding: 0.75rem; margin-bottom: 1.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        input:focus, button:focus { outline: 3px solid #005fcc; }
-        button { background-color: #005fcc; color: #fff; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        .staff-btn { background-color: #d32f2f; margin-top: 1rem;}
+        :root { --primary: #6366f1; --bg: #0f172a; --card: rgba(30, 41, 59, 0.7); --text: #f8fafc; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        main { 
+            width: 420px; padding: 2.5rem; background: var(--card); backdrop-filter: blur(12px); 
+            border-right: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 2rem;
+            z-index: 10; scrollbar-width: none; overflow-y: auto;
+        }
+        
+        #map-container { flex-grow: 1; height: 100%; background: #1e293b; }
+        
+        h1, h2 { font-weight: 800; letter-spacing: -0.025em; margin: 0; }
+        h1 { font-size: 1.875rem; color: #fff; }
+        h2 { font-size: 1.25rem; color: var(--primary); }
+
+        label { display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #94a3b8; }
+        input[type="text"] { 
+            width: 100%; padding: 0.875rem; background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; 
+            border-radius: 12px; color: #fff; transition: all 0.2s; font-size: 1rem;
+        }
+        input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2); }
+        
+        button { 
+            background: var(--primary); color: #fff; padding: 0.875rem 1.5rem; border: none; 
+            border-radius: 12px; cursor: pointer; font-weight: 700; transition: transform 0.2s, background 0.2s;
+            width: 100%;
+        }
+        button:hover { background: #4f46e5; transform: translateY(-1px); }
+        button:active { transform: translateY(0); }
+
+        .status-card { background: rgba(255,255,255,0.03); border-radius: 16px; padding: 1.5rem; border: 1px solid rgba(255,255,255,0.05); }
+        .itinerary-item { border-left: 3px solid var(--primary); padding-left: 1.25rem; margin-top: 1.5rem; animation: slideIn 0.4s ease-out; }
+        
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+        
+        .alert-box { 
+            background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); 
+            padding: 1.25rem; border-radius: 12px; font-size: 0.875rem; color: #fca5a5;
+            line-height: 1.5;
+        }
+        .staff-btn { background: #ef4444; margin-top: 1rem; }
+        .staff-btn:hover { background: #dc2626; }
     </style>
 </head>
 <body>
     <main role="main">
-        <section role="region" aria-labelledby="preferences-title">
-            <h1 id="preferences-title">Configure Your Itinerary</h1>
-            <div aria-live="polite" id="status-feed"></div>
+        <header>
+            <h1>Event Concierge</h1>
+            <p style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.5rem;">Elite AI Orchestation Platform</p>
+        </header>
 
-            <form id="preferences-form">
-                <label for="event-preferences">Event Preferences</label>
-                <input 
-                    type="text" 
-                    id="event-preferences" 
-                    name="event_preferences" 
-                    aria-label="Enter comma separated event preferences" 
-                    aria-required="true" 
-                    required 
-                    placeholder="e.g. AI, Cloud, Networking">
-                
-                <button type="submit">Generate Itinerary</button>
+        <section aria-labelledby="preferences-title">
+            <h2 id="preferences-title">Preferences</h2>
+            <form id="preferences-form" style="margin-top: 1.5rem;">
+                <label for="event-preferences">Sectors of Interest</label>
+                <input type="text" id="event-preferences" required placeholder="AI, Crypto, Fintech...">
+                <button type="submit" style="margin-top: 1rem;">Generate Real-time Itinerary</button>
             </form>
+            <div id="status-feed" style="margin-top: 1.5rem;"></div>
         </section>
 
-        <section id="staff-ui" role="region" aria-label="Staff Management Dashboard" style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #ddd;">
-            <h2>Live Staff Dashboard (WebSocket)</h2>
-            <div aria-live="assertive" id="mock-crowd-alert" style="background-color: #ffeb3b; padding: 1rem; border-left: 5px solid #d32f2f; margin-bottom: 1rem; font-size: 0.9em;">
-                Waiting for backend WebSocket events...
+        <section id="staff-ui" aria-label="Command Center">
+            <h2>Command Center</h2>
+            <div id="mock-crowd-alert" class="alert-box" style="margin-top: 1rem;">
+                Monitoring WebSocket stream...
             </div>
-            <button type="button" class="staff-btn" id="trigger-staff-btn">Trigger Secure Staff Alert</button>
+            <button type="button" class="staff-btn" id="trigger-staff-btn">Initiate Emergency Protocol</button>
         </section>
     </main>
 
-    <div id="map-container" aria-label="Live Event Map Integration"></div>
+    <div id="map-container" aria-label="Geospatial Intelligence Map"></div>
 
     <script>
         let map;
 
         async function initApp() {
             try {
-                // Safely load secrets via Config API
                 const configRes = await fetch('/api/config/maps');
                 const config = await configRes.json();
                 
-                // Inject Google Maps SDK Dynamically
                 const script = document.createElement('script');
-                script.src = `https://maps.googleapis.com/maps/api/js?key=${config.maps_key}&callback=initMap`;
+                // Added libraries=marker and async/defer properly
+                script.src = `https://maps.googleapis.com/maps/api/js?key=${config.maps_key}&callback=initMap&libraries=marker&v=weekly`;
                 script.async = true;
                 script.defer = true;
-                window.initMap = () => {
-                    map = new google.maps.Map(document.getElementById("map-container"), {
+                
+                window.initMap = async () => {
+                    const { Map } = await google.maps.importLibrary("maps");
+                    const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
+
+                    map = new Map(document.getElementById("map-container"), {
                         center: { lat: 37.784, lng: -122.401 },
                         zoom: 15,
+                        mapId: "DEMO_MAP_ID", // Required for AdvancedMarkerElement
+                        mapId: "4504f8b37365c3d0", // Optional: Example Map ID for dark theme
+                        styles: [ // Fallback dark theme styles
+                            { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+                            { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+                            { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+                        ]
                     });
-                    // Plot Markers dynamically
+
                     config.events.forEach(evt => {
-                        new google.maps.Marker({
-                            position: { lat: evt.latitude, lng: evt.longitude },
+                        new AdvancedMarkerElement({
                             map,
+                            position: { lat: evt.latitude, lng: evt.longitude },
                             title: evt.name,
                         });
                     });
                 };
                 document.head.appendChild(script);
             } catch (err) {
-                console.error("Failed to load map config", err);
+                console.error("Critical: Initialization error", err);
             }
             
             // Connect WebSocket
