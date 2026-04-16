@@ -3,6 +3,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import ValidationError
 from schemas.models import UserConstraints, ItineraryResponse, StaffActionRequest, StaffActionResponse
 from services.maps import maps_service
 from services.gemini import gemini_service
@@ -12,12 +13,17 @@ from utils.websockets import ws_manager
 from utils.config import settings
 import asyncio
 import json
+import secrets
 
 security = HTTPBearer()
 
 def verify_staff_token(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
-    # Use environment-based token for better security
-    if credentials.credentials != settings.STAFF_SECRET_TOKEN:
+    """
+    Verifies the staff authentication token using a constant-time comparison 
+    to prevent timing side-channel attacks.
+    """
+    is_valid = secrets.compare_digest(credentials.credentials, settings.STAFF_SECRET_TOKEN)
+    if not is_valid:
         raise HTTPException(status_code=403, detail="Forbidden: Invalid staff authentication token.")
     return credentials.credentials
 
@@ -105,6 +111,12 @@ async def create_itinerary(constraints: UserConstraints) -> ItineraryResponse:
         itinerary.current_weather = current_weather
         return itinerary
 
+    except ValidationError as e:
+        logger.error(f"AI Schema Validation Error: {e}")
+        raise HTTPException(
+            status_code=422, 
+            detail="AI generated an invalid itinerary format. Please try again with adjusted constraints."
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

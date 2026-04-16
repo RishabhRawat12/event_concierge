@@ -247,7 +247,7 @@
                 <div id="staffAlert" class="alert-box">
                     <p>System Online. Awaiting Real-time Feeds...</p>
                 </div>
-                <button type="button" class="staff-btn" id="trigger-staff-btn">Initiate Emergency Protocol</button>
+                <button type="button" class="staff-btn" id="trigger-staff-btn" aria-live="polite">Initiate Emergency Protocol</button>
             </section>
         </aside>
 
@@ -331,6 +331,7 @@
             e.preventDefault();
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = true;
+            submitBtn.setAttribute('aria-busy', 'true');
             submitBtn.textContent = 'Generating...';
 
             const start = document.getElementById('startTime').value;
@@ -378,6 +379,7 @@
                 alert('Error: ' + err.message);
             } finally {
                 submitBtn.disabled = false;
+                submitBtn.removeAttribute('aria-busy');
                 submitBtn.textContent = 'Generate Itinerary';
             }
         });
@@ -390,7 +392,8 @@
                 return;
             }
             btn.disabled = true;
-            try {
+            btn.setAttribute('aria-busy', 'true');
+            btn.textContent = 'Processing...';
                 const response = await fetch('/api/staff/zone-action', {
                     method: 'POST',
                     headers: { 
@@ -407,6 +410,8 @@
                 alert('Staff Portal Error: ' + err.message);
             } finally {
                 btn.disabled = false;
+                btn.removeAttribute('aria-busy');
+                btn.textContent = 'Initiate Emergency Protocol';
             }
         });
     </script>

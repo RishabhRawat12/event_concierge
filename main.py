@@ -75,7 +75,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "font-src 'self' https://fonts.gstatic.com; "
             "connect-src 'self' https://maps.googleapis.com wss: ws:; "
             "worker-src 'self' blob:; "
-            "frame-src 'self' https://maps.googleapis.com;"
+            "frame-src 'self' https://maps.googleapis.com; "
+            "base-uri 'self'; "
+            "form-action 'self';"
         )
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
