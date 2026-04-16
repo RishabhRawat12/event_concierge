@@ -2,23 +2,35 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from main import app
 from schemas.models import StaffActionResponse
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
+from utils.config import settings
 
 @pytest.mark.asyncio
 @patch("api.routes.gemini_service.generate_staff_protocol")
-async def test_staff_zone_action_endpoint_authorized(mock_protocol, async_client: AsyncClient):
+@patch("api.routes.fb_manager.update_zone_status", new_callable=AsyncMock)
+@patch("api.routes.analytics_manager.log_event_anomaly", new_callable=AsyncMock)
+@patch("api.routes.ws_manager.broadcast", new_callable=AsyncMock)
+async def test_staff_zone_action_endpoint_authorized(
+    mock_ws, mock_analytics, mock_fb, mock_protocol, async_client: AsyncClient
+):
     # Mocking the gemini service to avoid external API calls during testing
-    mock_response = StaffActionResponse(protocol="Engage crowd control barriers and notify manager.")
+    mock_response = StaffActionResponse(protocol="Engage crowd control barriers.")
     mock_protocol.return_value = mock_response
     
-    payload = {"zone_id": "Zone B", "alert_type": "Crowd Density"}
-    headers = {"Authorization": "Bearer SUPER_SECRET_STAFF_TOKEN"}
+    payload = {"zone_id": "Gate 4", "alert_type": "Crowd Density"}
+    # Use the token from settings to ensure match
+    headers = {"Authorization": f"Bearer {settings.STAFF_SECRET_TOKEN}"}
     
     response = await async_client.post("/api/staff/zone-action", json=payload, headers=headers)
         
     assert response.status_code == 200
-    data = response.json()
-    assert "protocol" in data
+    expected_data = response.json()
+    assert expected_data["protocol"] == "Engage crowd control barriers."
+    
+    # Verify the "Winning Edge" side effects happened
+    mock_fb.assert_called_once()
+    mock_analytics.assert_called_once()
+    mock_ws.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_staff_zone_action_endpoint_unauthorized():
@@ -29,9 +41,7 @@ async def test_staff_zone_action_endpoint_unauthorized():
         response = await ac.post("/api/staff/zone-action", json=payload)
         assert response.status_code == 401
         
-        # Wrong header (FastAPI HTTPBearer doesn't validate content automatically, just presence)
-        # Actually, for 100% security logic, I added a verify function that raises 403 for wrong token.
-        # But if the header is missing, it's 401.
-        headers = {"Authorization": "Bearer WRONG"}
+        # Wrong header
+        headers = {"Authorization": "Bearer WRONG_TOKEN"}
         response = await ac.post("/api/staff/zone-action", json=payload, headers=headers)
         assert response.status_code == 403
