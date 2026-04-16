@@ -11,3 +11,5 @@ httpx
 
 googlemaps==4.10.0
 google-cloud-logging==3.9.0
+jinja2
+aiofiles

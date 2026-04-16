@@ -1,23 +1,27 @@
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse
 import os
 import time
 import uuid
-from api.routes import router as itinerary_router, staff_router
-from utils.redis import cache
-from utils.websockets import ws_manager
-import uvicorn
 from contextlib import asynccontextmanager
 from redis.exceptions import TimeoutError, RedisError
 import logging
 import aiohttp
+from typing import AsyncGenerator
+from fastapi.templating import Jinja2Templates
+import uvicorn
+
+from api.routes import router as itinerary_router, staff_router
+from utils.redis import cache
+from utils.websockets import ws_manager
 from services.weather import weather_service
+from services.gemini import gemini_service
+from utils.config import settings
 
 logger = logging.getLogger(__name__)
-
-from typing import AsyncGenerator
+templates = Jinja2Templates(directory="static")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -35,6 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.error(f"Failed to connect to Redis during startup: {e}")
         
+    await gemini_service.load_events()
     weather_service.session = aiohttp.ClientSession()
         
     yield
@@ -60,14 +65,27 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
+        # Hardened CSP for production: allows maps, fonts, and specific external workers/frames
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self' https://maps.googleapis.com https://fonts.gstatic.com; "
+            "script-src 'self' 'unsafe-inline' https://maps.googleapis.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "img-src 'self' data: https://*.googleapis.com https://*.gstatic.com *.ggpht.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "connect-src 'self' https://maps.googleapis.com wss: ws:; "
+            "worker-src 'self' blob:; "
+            "frame-src 'self' https://maps.googleapis.com;"
+        )
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost", "http://localhost:8000", "http://localhost:8080"],
+    allow_origins=["http://localhost:8000"], # Tighten to local dev port
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST"], # Tighten methods
     allow_headers=["*"],
 )
 
@@ -75,8 +93,11 @@ app.include_router(itinerary_router, prefix="/api")
 app.include_router(staff_router, prefix="/api/staff", tags=["Staff Action Orchestration"])
 
 @app.get("/", include_in_schema=False)
-async def serve_index() -> FileResponse:
-    return FileResponse(os.path.join("static", "index.html"))
+async def serve_index(request: Request) -> Response:
+    return templates.TemplateResponse(
+        "index.html", 
+        {"request": request, "maps_key": settings.GOOGLE_MAPS_API_KEY, "events": gemini_service.mock_events}
+    )
 
 @app.exception_handler(TimeoutError)
 @app.exception_handler(RedisError)

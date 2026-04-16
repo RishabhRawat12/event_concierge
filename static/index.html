@@ -3,198 +3,413 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Event Concierge Assessment Platform</title>
+    <title>Event Concierge - AI Powered Itinerary</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <style>
-        :root { --primary: #6366f1; --bg: #0f172a; --card: rgba(30, 41, 59, 0.7); --text: #f8fafc; }
-        body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        
-        main { 
-            width: 420px; padding: 2.5rem; background: var(--card); backdrop-filter: blur(12px); 
-            border-right: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 2rem;
-            z-index: 10; scrollbar-width: none; overflow-y: auto;
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --danger: #ef4444;
+            --success: #22c55e;
         }
-        
-        #map-container { flex-grow: 1; height: 100%; background: #1e293b; }
-        
-        h1, h2 { font-weight: 800; letter-spacing: -0.025em; margin: 0; }
-        h1 { font-size: 1.875rem; color: #fff; }
-        h2 { font-size: 1.25rem; color: var(--primary); }
 
-        label { display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 600; color: #94a3b8; }
-        input[type="text"] { 
-            width: 100%; padding: 0.875rem; background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; 
-            border-radius: 12px; color: #fff; transition: all 0.2s; font-size: 1rem;
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow-x: hidden;
         }
-        input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2); }
-        
-        button { 
-            background: var(--primary); color: #fff; padding: 0.875rem 1.5rem; border: none; 
-            border-radius: 12px; cursor: pointer; font-weight: 700; transition: transform 0.2s, background 0.2s;
+
+        .skip-link {
+            position: absolute;
+            top: -100px;
+            left: 0;
+            background: var(--primary);
+            color: white;
+            padding: 1rem;
+            z-index: 1000;
+            transition: top 0.3s;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .skip-link:focus {
+            top: 0;
+        }
+
+        header {
+            padding: 3rem 1rem;
+            text-align: center;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        h1 { 
+            margin: 0; 
+            font-size: 2.5rem; 
+            font-weight: 800; 
+            background: linear-gradient(to right, #818cf8, #c084fc); 
+            -webkit-background-clip: text; 
+            background-clip: text; 
+            -webkit-text-fill-color: transparent; 
+        }
+        header p { color: var(--text-muted); margin-top: 0.5rem; font-size: 1.1rem; }
+
+        .container {
+            max-width: 1600px;
+            width: 95%;
+            margin: 0 auto;
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: minmax(320px, 400px) 1fr;
+            gap: 2.5rem;
+            flex-grow: 1;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: 1.25rem;
+            padding: 2rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border: 1px solid rgba(255,255,255,0.05);
+            height: fit-content;
+        }
+
+        h2 { font-size: 1.5rem; margin-top: 0; margin-bottom: 1.5rem; border-bottom: 2px solid var(--primary); width: fit-content; padding-bottom: 0.25rem; }
+
+        .form-group { margin-bottom: 1.25rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-muted); }
+
+        input, select, button {
             width: 100%;
+            padding: 0.875rem;
+            border-radius: 0.75rem;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: white;
+            font-size: 1rem;
+            font-family: inherit;
+            transition: all 0.2s;
         }
-        button:hover { background: #4f46e5; transform: translateY(-1px); }
-        button:active { transform: translateY(0); }
 
-        .status-card { background: rgba(255,255,255,0.03); border-radius: 16px; padding: 1.5rem; border: 1px solid rgba(255,255,255,0.05); }
-        .itinerary-item { border-left: 3px solid var(--primary); padding-left: 1.25rem; margin-top: 1.5rem; animation: slideIn 0.4s ease-out; }
-        
-        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
-        
-        .alert-box { 
-            background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); 
-            padding: 1.25rem; border-radius: 12px; font-size: 0.875rem; color: #fca5a5;
-            line-height: 1.5;
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
         }
-        .staff-btn { background: #ef4444; margin-top: 1rem; }
+
+        button {
+            background: var(--primary);
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        button:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #map {
+            height: 700px;
+            width: 100%;
+            border-radius: 1.25rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #itineraryResult { margin-top: 2rem; }
+        .itinerary-item {
+            border-left: 4px solid var(--primary);
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            background: rgba(255,255,255,0.02);
+            border-radius: 0 0.75rem 0.75rem 0;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: translateY(10px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+
+        .itinerary-item h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; color: #fff; }
+        .itinerary-item p { margin: 0.25rem 0; color: var(--text-muted); font-size: 0.95rem; }
+        .weather-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            background: var(--primary);
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+        }
+
+        .alert-box {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            margin-top: 1.5rem;
+            color: #fca5a5;
+        }
+
+        .staff-btn { background: var(--danger); }
         .staff-btn:hover { background: #dc2626; }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+
+        .sidebar::-webkit-scrollbar { width: 6px; }
+        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+
+        @media (max-width: 1024px) {
+            .container { grid-template-columns: 1fr; width: 100%; }
+            #map { height: 500px; }
+            .sidebar { max-height: none; overflow: visible; }
+        }
     </style>
 </head>
 <body>
-    <main role="main">
-        <header>
-            <h1>Event Concierge</h1>
-            <p style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.5rem;">Elite AI Orchestation Platform</p>
-        </header>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    
+    <header>
+        <h1>Event Concierge</h1>
+        <p>Premium AI Orchestation for Seamless Events</p>
+    </header>
 
-        <section aria-labelledby="preferences-title">
-            <h2 id="preferences-title">Preferences</h2>
-            <form id="preferences-form" style="margin-top: 1.5rem;">
-                <label for="event-preferences">Sectors of Interest</label>
-                <input type="text" id="event-preferences" required placeholder="AI, Crypto, Fintech...">
-                <button type="submit" style="margin-top: 1rem;">Generate Real-time Itinerary</button>
-            </form>
-            <div id="status-feed" style="margin-top: 1.5rem;"></div>
-        </section>
+    <main id="main-content" class="container">
+        <aside class="sidebar">
+            <section class="card">
+                <h2>Plan Your Day</h2>
+                <form id="itineraryForm">
+                    <div class="form-group">
+                        <label for="startTime">Start Time</label>
+                        <input type="text" id="startTime" value="09:00 AM" placeholder="e.g. 09:00 AM" required aria-describedby="time-hint">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="endTime">End Time</label>
+                        <input type="text" id="endTime" value="05:00 PM" placeholder="e.g. 05:00 PM" required>
+                    </div>
 
-        <section id="staff-ui" aria-label="Command Center">
-            <h2>Command Center</h2>
-            <div id="mock-crowd-alert" class="alert-box" style="margin-top: 1rem;">
-                Monitoring WebSocket stream...
+                    <div class="form-group">
+                        <label for="interests">Interests</label>
+                        <select id="interests" multiple size="4" aria-label="Select your interests">
+                            <option value="Tech">Tech</option>
+                            <option value="Marketing">Marketing</option>
+                            <option value="Design">Design</option>
+                            <option value="Business">Business</option>
+                        </select>
+                        <p id="time-hint" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">Hold Ctrl/Cmd to select multiple</p>
+                    </div>
+
+                    <button type="submit" id="submitBtn">Generate Itinerary</button>
+                </form>
+            </section>
+
+            <section id="itinerarySection" class="card" style="margin-top: 1.5rem; display: none;">
+                <h2>Your Schedule</h2>
+                <div id="weatherInfo"></div>
+                <div id="itineraryContent"></div>
+            </section>
+
+            <section class="card" style="margin-top: 1.5rem;">
+                <h2>Command Center</h2>
+                <div class="form-group">
+                    <label for="staffToken">Staff Access Token</label>
+                    <input type="password" id="staffToken" placeholder="Enter Token for Emergency Access">
+                </div>
+                <div id="staffAlert" class="alert-box">
+                    <p>System Online. Awaiting Real-time Feeds...</p>
+                </div>
+                <button type="button" class="staff-btn" id="trigger-staff-btn">Initiate Emergency Protocol</button>
+            </section>
+        </aside>
+
+        <section class="map-view">
+            <div class="card">
+                <h2>Interactive Map</h2>
+                <div id="map" role="application" aria-label="Google Maps showing event locations"></div>
             </div>
-            <button type="button" class="staff-btn" id="trigger-staff-btn">Initiate Emergency Protocol</button>
         </section>
     </main>
 
-    <div id="map-container" aria-label="Geospatial Intelligence Map"></div>
-
+    <script id="events-data" type="application/json">{{ events | tojson | safe }}</script>
     <script>
         let map;
-
-        async function initApp() {
-            try {
-                const configRes = await fetch('/api/config/maps');
-                const config = await configRes.json();
-                
-                const script = document.createElement('script');
-                // Added libraries=marker and async/defer properly
-                script.src = `https://maps.googleapis.com/maps/api/js?key=${config.maps_key}&callback=initMap&libraries=marker&v=weekly`;
-                script.async = true;
-                script.defer = true;
-                
-                window.initMap = async () => {
-                    const { Map } = await google.maps.importLibrary("maps");
-                    const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
-
-                    map = new Map(document.getElementById("map-container"), {
-                        center: { lat: 37.784, lng: -122.401 },
-                        zoom: 15,
-                        mapId: "DEMO_MAP_ID", // Required for AdvancedMarkerElement
-                        mapId: "4504f8b37365c3d0", // Optional: Example Map ID for dark theme
-                        styles: [ // Fallback dark theme styles
-                            { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-                            { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-                            { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-                        ]
-                    });
-
-                    config.events.forEach(evt => {
-                        new AdvancedMarkerElement({
-                            map,
-                            position: { lat: evt.latitude, lng: evt.longitude },
-                            title: evt.name,
-                        });
-                    });
-                };
-                document.head.appendChild(script);
-            } catch (err) {
-                console.error("Critical: Initialization error", err);
-            }
-            
-            // Connect WebSocket
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-            ws.onmessage = (event) => {
-                const alertData = JSON.parse(event.data);
-                const statusBox = document.getElementById('mock-crowd-alert');
-                statusBox.innerHTML = `
-                    <strong style="color:#d32f2f">CRITICAL: [${alertData.zone_id}] - ${alertData.alert_type}</strong><br/>
-                    <strong style="color:green">AI Resolution Protocol:</strong> ${alertData.protocol}
-                `;
-            };
-        }
+        const eventData = JSON.parse(document.getElementById('events-data').textContent);
         
-        initApp();
+        async function initMap() {
+            try {
+                const { Map, InfoWindow } = await google.maps.importLibrary("maps");
+                const { AdvancedMarkerElement, PinElement } = await google.maps.importLibrary("marker");
 
-        document.getElementById('preferences-form').addEventListener('submit', async (e) => {
+                map = new Map(document.getElementById("map"), {
+                    center: { lat: 37.784, lng: -122.401 },
+                    zoom: 15,
+                    mapId: "DEMO_MAP_ID",
+                    disableDefaultUI: false,
+                    zoomControl: true
+                });
+
+                const infoWindow = new InfoWindow();
+
+                eventData.forEach(event => {
+                    const pin = new PinElement({
+                        background: "#6366f1",
+                        borderColor: "#4f46e5",
+                        glyphColor: "white",
+                        scale: 1,
+                    });
+
+                    const marker = new AdvancedMarkerElement({
+                        position: { lat: event.latitude, lng: event.longitude },
+                        map: map,
+                        title: event.name,
+                        content: pin.element
+                    });
+
+                    marker.addListener("click", () => {
+                        infoWindow.close();
+                        infoWindow.setContent(`
+                            <div style="color: #334155; padding: 0.5rem;">
+                                <h3 style="margin: 0 0 0.5rem 0">${event.name}</h3>
+                                <p style="margin: 0"><strong>Category:</strong> ${event.topic}</p>
+                                <p style="margin: 0.25rem 0 0 0">${event.location}</p>
+                            </div>
+                        `);
+                        infoWindow.open(marker.map, marker);
+                    });
+                });
+            } catch (error) {
+                console.error("Error initializing Google Maps:", error);
+            }
+        }
+
+        // WebSocket Setup
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+        
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            const alertBox = document.getElementById('staffAlert');
+            alertBox.style.background = 'rgba(34, 197, 94, 0.1)';
+            alertBox.style.borderColor = 'rgba(34, 197, 94, 0.2)';
+            alertBox.style.color = 'var(--success)';
+            alertBox.innerHTML = `
+                <div style="font-weight: 600">ACTION REQUIRED: ${data.zone_id}</div>
+                <div style="font-size: 0.9rem; margin-top: 0.5rem; color: var(--text)">${data.protocol}</div>
+            `;
+        };
+
+        document.getElementById('itineraryForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const topicsInput = document.getElementById('event-preferences').value;
-            const topics = topicsInput.split(',').map(t => t.trim()).filter(t => t);
-            
-            const payload = {
-                user_location: { latitude: 37.784261, longitude: -122.401344 },
-                start_time: "09:00 AM",
-                end_time: "05:00 PM",
-                preferred_topics: topics.length > 0 ? topics : ["AI"]
-            };
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Generating...';
 
-            const statusFeed = document.getElementById('status-feed');
-            statusFeed.innerHTML = "<p><em>Generating optimal itinerary...</em></p>";
+            const start = document.getElementById('startTime').value;
+            const end = document.getElementById('endTime').value;
+            const interests = Array.from(document.getElementById('interests').selectedOptions).map(o => o.value);
 
             try {
                 const response = await fetch('/api/itinerary', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({
+                        user_location: { latitude: 37.7749, longitude: -122.4194 },
+                        start_time: start,
+                        end_time: end,
+                        preferred_topics: interests.length > 0 ? interests : ["Tech"]
+                    })
                 });
 
-                if (!response.ok) throw new Error(`API ${response.status}`);
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Request failed');
+                }
+
                 const data = await response.json();
+                const container = document.getElementById('itineraryContent');
+                const weatherBox = document.getElementById('weatherInfo');
+                const section = document.getElementById('itinerarySection');
                 
-                let html = `<h3>Weather Context: ${data.current_weather || 'Unknown'}</h3>`;
-                data.itinerary.forEach(evt => {
-                    html += `
-                        <div style="margin-top: 1rem; margin-bottom: 1rem; border-left: 4px solid #005fcc; padding-left: 1rem;">
-                            <strong>${evt.event_name}</strong><br/>
-                            <small>${evt.start_time} - ${evt.end_time} (${evt.transition_time_seconds}s walk)</small><br/>
-                            <em>${evt.walking_directions}</em>
-                        </div>
+                weatherBox.innerHTML = `<span class="weather-badge">Current Weather: ${data.current_weather}</span>`;
+                container.innerHTML = '';
+                
+                data.itinerary.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'itinerary-item';
+                    div.innerHTML = `
+                        <h3>${item.event_name}</h3>
+                        <p><strong>Time:</strong> ${item.start_time} - ${item.end_time}</p>
+                        <p>Travel: ${Math.round(item.transition_time_seconds / 60)} min walk</p>
+                        <p style="font-style: italic; margin-top: 0.5rem; color: var(--text)">${item.walking_directions}</p>
                     `;
+                    container.appendChild(div);
                 });
-                statusFeed.innerHTML = html;
+                section.style.display = 'block';
             } catch (err) {
-                statusFeed.innerHTML = `<p style="color:red"><strong>Failed:</strong> ${err.message}</p>`;
+                alert('Error: ' + err.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Generate Itinerary';
             }
         });
 
         document.getElementById('trigger-staff-btn').addEventListener('click', async () => {
-            const statusBox = document.getElementById('mock-crowd-alert');
-            statusBox.innerHTML = "<em>Sending secure alert via token auth...</em>";
+            const btn = document.getElementById('trigger-staff-btn');
+            const token = document.getElementById('staffToken').value;
+            if (!token) {
+                alert('Please enter a Staff Access Token');
+                return;
+            }
+            btn.disabled = true;
             try {
                 const response = await fetch('/api/staff/zone-action', {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'Authorization': 'Bearer SUPER_SECRET_STAFF_TOKEN'
+                        'Authorization': 'Bearer ' + token
                     },
-                    body: JSON.stringify({ zone_id: "Main Gate", alert_type: "Access Control Bottleneck" })
+                    body: JSON.stringify({ 
+                        zone_id: "Main Entrance", 
+                        alert_type: "High Crowd Density" 
+                    })
                 });
-                
-                if (!response.ok) throw new Error(`Staff Server Error: ${response.status}`);
-                // UI updates naturally via the WebSocket Broadcast payload!
+                if (!response.ok) throw new Error('Authorization failed or server error');
             } catch (err) {
-                statusBox.innerHTML = `<strong style="color:red">Failed Auth / Push:</strong> ${err.message}`;
+                alert('Staff Portal Error: ' + err.message);
+            } finally {
+                btn.disabled = false;
             }
         });
     </script>
+    <script async src="https://maps.googleapis.com/maps/api/js?key={{ maps_key }}&callback=initMap"></script>
 </body>
 </html>

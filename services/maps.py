@@ -29,10 +29,11 @@ class MapsService:
         import hashlib
         import json
 
-        origins_list = [f"{loc['latitude']},{loc['longitude']}" for loc in origins]
-        dest_list = [f"{loc['latitude']},{loc['longitude']}" for loc in destinations]
+        origins_list = sorted([f"{loc['latitude']},{loc['longitude']}" for loc in origins])
+        dest_list = sorted([f"{loc['latitude']},{loc['longitude']}" for loc in destinations])
         
         # Security & Efficiency: Use deterministic SHA256 instead of native volatile hash()
+        # Sorting ensures that the same set of locations always yields the same cache key regardless of order
         h_orig = hashlib.sha256(json.dumps(origins_list).encode()).hexdigest()
         h_dest = hashlib.sha256(json.dumps(dest_list).encode()).hexdigest()
         cache_key = f"maps:walking:batch:{h_orig}:{h_dest}"

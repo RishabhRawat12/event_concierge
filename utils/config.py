@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     OPENWEATHER_API_KEY: str
     REDIS_URL: str = "redis://localhost:6379"  # Will be replaced with Upstash url in prod
     REDIS_TIMEOUT_SECONDS: int = 2
+    STAFF_SECRET_TOKEN: str = "SUPER_SECRET_STAFF_TOKEN" # Default for local dev
 
     model_config = SettingsConfigDict(
         env_file=".env",
