@@ -15,7 +15,7 @@ class GeminiService:
     def __init__(self) -> None:
         self.api_key = settings.GEMINI_API_KEY
         self.client = genai.Client(api_key=self.api_key)
-        self.model_id = "gemini-1.5-flash" 
+        self.model_id = "gemini-3-flash-preview"
         self.mock_events = []
         self.router = None
 
@@ -60,6 +60,17 @@ class GeminiService:
                             },
                             required=["zone_id"]
                         )
+                    ),
+                    types.FunctionDeclaration(
+                        name="search_events",
+                        description="Searches for events by name or topic to find their IDs and locations.",
+                        parameters=types.Schema(
+                            type=types.Type.OBJECT,
+                            properties={
+                                "query": types.Schema(type=types.Type.STRING, description="The search query (e.g. 'AI' or 'Cloud')")
+                            },
+                            required=["query"]
+                        )
                     )
                 ]
             )
@@ -82,14 +93,20 @@ class GeminiService:
         status = states.get(zone_id, "CLEAR")
         return json.dumps({"zone_id": zone_id, "status": status, "timestamp": "Real-time"})
 
+    def search_events(self, query: str) -> str:
+        """Internal tool for finding event IDs."""
+        results = [e for e in self.mock_events if query.lower() in e["name"].lower() or query.lower() in e["topic"].lower()]
+        return json.dumps({"events": results[:5]})
+
     async def generate_itinerary(self, constraints: UserConstraints, distance_matrix_info: str, current_weather: Optional[str] = "Clear") -> ItineraryResponse:
         """
-        High-performance Agentic orchestration loop using Gemini 1.5 Flash Tool Use.
-        The AI reasoning determines which paths to calculate and which zones to check.
+        High-performance Agentic orchestration loop using Gemini 3 Flash Tool Use.
+        Robustly handles multi-turn reasoning and potential 404/schema errors.
         """
         tools_map = {
             "calculate_optimal_route": self.calculate_optimal_route,
-            "get_zone_congestion": self.get_zone_congestion
+            "get_zone_congestion": self.get_zone_congestion,
+            "search_events": self.search_events
         }
 
         prompt = f"""
@@ -98,10 +115,9 @@ class GeminiService:
         Weather: {current_weather}
         
         System Grounding:
-        - Use calculate_optimal_route to ensure the travel distance is optimized (Determinism).
-        - Use get_zone_congestion to avoid CRITICAL zones.
-        - Result must be an ItineraryResponse matching the exact schema.
-        - Prioritize events by proximity and topic relevance.
+        - Use calculate_optimal_route to ensure spatial optimization.
+        - Use get_zone_congestion to avoid CRITICAL congestion zones.
+        - The final response MUST be a valid ItineraryResponse.
         """
 
         try:
@@ -113,31 +129,45 @@ class GeminiService:
             
             response = await chat.send_message(prompt)
             
-            # Agentic Loop: Handle tool calls (supports multi-turn)
-            while response.candidates[0].content.parts[0].function_call:
-                fc = response.candidates[0].content.parts[0].function_call
+            # Agentic Loop: Support up to 5 reasoning turns
+            for _ in range(5):
+                if not response.candidates or not response.candidates[0].content.parts:
+                    break
+                
+                parts = response.candidates[0].content.parts
+                # Check for function call in ANY part
+                fc = next((p.function_call for p in parts if p.function_call), None)
+                
+                if not fc:
+                    break
+
                 tool_name = fc.name
                 tool_args = fc.args
                 
-                logger.info(f"AI Reasoning: Calling tool '{tool_name}' with {tool_args}")
-                result = tools_map[tool_name](**tool_args)
+                logger.info(f"AI Reasoning Turn: Calling tool '{tool_name}'")
+                try:
+                    result_str = tools_map[tool_name](**tool_args)
+                    result_json = json.loads(result_str)
+                except Exception as tool_err:
+                    logger.warning(f"Tool execution failed: {tool_err}")
+                    result_json = {"error": str(tool_err)}
                 
                 response = await chat.send_message(
-                    types.Content(
-                        parts=[types.Part(function_response=types.FunctionResponse(name=tool_name, response=json.loads(result)))]
-                    )
+                    [types.Part(function_response=types.FunctionResponse(name=tool_name, response=result_json))]
                 )
 
             # Final step: Enforce schema on the reasoned output
-            final_resp = await self.client.aio.models.generate_content(
-                model=self.model_id,
-                contents=[f"Finalize this itinerary based on the previous reasoning. Format as JSON: {response.text}"],
+            final_resp = await chat.send_message(
+                "Construct the final ItineraryResponse JSON based on the reasoning above.",
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json", 
                     response_schema=ItineraryResponse
                 )
             )
             
+            if not final_resp or not final_resp.text:
+                raise ValueError("AI failed to generate a final response text.")
+                
             return ItineraryResponse.model_validate_json(final_resp.text)
 
         except Exception as e:

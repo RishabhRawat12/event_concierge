@@ -26,6 +26,11 @@ from services.gemini import gemini_service
 from utils.config import settings
 
 # Initialize Logging and Templates
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
 logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory="static")
 
@@ -131,12 +136,12 @@ async def redis_exception_handler(request: Request, exc: Exception) -> JSONRespo
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     trace_id = str(uuid.uuid4())
-    logger.error(f"trace_id={trace_id} | Internal Server Error: {exc}")
+    logger.exception(f"trace_id={trace_id} | Internal Server Error")
     return JSONResponse(
         status_code=500,
         content={
             "status": "error",
-            "message": "Internal Server Error",
+            "message": f"Internal Server Error: {str(exc)}",
             "trace_id": trace_id
         },
         headers={"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY"}
