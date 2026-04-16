@@ -2,6 +2,8 @@ from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 import os
 import time
 import uuid
@@ -10,11 +12,22 @@ from redis.exceptions import TimeoutError, RedisError
 import logging
 import aiohttp
 from typing import AsyncGenerator
-from fastapi.templating import Jinja2Templates
 import uvicorn
 
+# Internal Infrastructure & Services
 from api.routes import router as itinerary_router, staff_router
+from utils.redis import cache
+from utils.websockets import ws_manager
+from utils.firebase import fb_manager
+from utils.analytics import analytics_manager
 from utils.simulation import sim_engine
+from services.weather import weather_service
+from services.gemini import gemini_service
+from utils.config import settings
+
+# Initialize Logging and Templates
+logger = logging.getLogger(__name__)
+templates = Jinja2Templates(directory="static")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -22,7 +35,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         fb_manager.connect()
         analytics_manager.connect()
-        # Start Live Simulation
+        # Start Live Simulation for dynamic demo data
         await sim_engine.start_sim()
         
         if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
@@ -32,23 +45,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning(f"Metadata Services Warning: {e}")
 
+    # Connect to high-performance Redis cache
     try:
         await cache.connect()
     except Exception as e:
         logger.error(f"Redis fallback mode active: {e}")
         
+    # Pre-warm AI services
     await gemini_service.load_events()
     weather_service.session = aiohttp.ClientSession()
         
     yield
     
-    # Clean shutdown
+    # Clean shutdown of all persistent sockets and clients
     if getattr(weather_service, 'session', None):
         await weather_service.session.close()
     try:
         await cache.close()
     except Exception:
         pass
+    await sim_engine.stop_sim()
 
 app = FastAPI(
     title="Next-Gen Event Concierge",
@@ -63,7 +79,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         # Hardened CSP for production: allows maps, fonts, and specific external workers/frames
-        # Added exceptions for Swagger UI (Docs) dependencies
         response.headers["Content-Security-Policy"] = (
             "default-src 'self' https://maps.googleapis.com https://fonts.gstatic.com; "
             "script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://cdn.jsdelivr.net; "
@@ -83,11 +98,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000"], # Tighten to local dev port
+    allow_origins=["http://localhost:8000"], 
     allow_credentials=True,
-    allow_methods=["GET", "POST"], # Tighten methods
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+# Static file serving for accessibility assets
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.include_router(itinerary_router, prefix="/api")
 app.include_router(staff_router, prefix="/api/staff", tags=["Staff Action Orchestration"])
@@ -105,31 +124,20 @@ async def redis_exception_handler(request: Request, exc: Exception) -> JSONRespo
     logger.error(f"Redis Connection Error: {exc}")
     return JSONResponse(
         status_code=503,
-        content={"error": "Service Unavailable", "message": "Cache/Database connection timeout."},
-        headers={"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY"}
-    )
-
-@app.exception_handler(RuntimeError)
-async def upstream_api_exception_handler(request: Request, exc: RuntimeError) -> JSONResponse:
-    logger.error(f"Upstream API Error (Maps/Gemini): {exc}")
-    return JSONResponse(
-        status_code=502,
-        content={"error": "Bad Gateway", "message": "An upstream API failed to process the request."},
+        content={"error": "Service Unavailable", "message": "Cache connection timeout."},
         headers={"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY"}
     )
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     trace_id = str(uuid.uuid4())
-    timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     logger.error(f"trace_id={trace_id} | Internal Server Error: {exc}")
     return JSONResponse(
         status_code=500,
         content={
             "status": "error",
             "message": "Internal Server Error",
-            "trace_id": trace_id,
-            "timestamp": timestamp
+            "trace_id": trace_id
         },
         headers={"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY"}
     )
