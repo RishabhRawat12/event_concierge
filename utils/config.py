@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+import os
+
 class Settings(BaseSettings):
     GEMINI_API_KEY: str
     GOOGLE_MAPS_API_KEY: str
@@ -21,3 +23,7 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+
+# Ensure credentials are in the environment for official GCP SDKs
+if settings.GOOGLE_APPLICATION_CREDENTIALS and os.path.exists(settings.GOOGLE_APPLICATION_CREDENTIALS):
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS

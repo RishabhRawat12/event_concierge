@@ -16,12 +16,15 @@ class AnalyticsManager:
             return
             
         try:
-            if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+            # Check environment or settings for credentials
+            cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or settings.GOOGLE_APPLICATION_CREDENTIALS
+            
+            if cred_path and os.path.exists(cred_path):
                 self.client = bigquery.Client()
                 self._initialized = True
                 logger.info("BigQuery Client initialized.")
             else:
-                logger.warning("No credentials found for BigQuery.")
+                logger.warning(f"No credentials found for BigQuery at {cred_path}. Analytical streaming disabled.")
         except Exception as e:
             logger.error(f"Failed to initialize BigQuery: {e}")
 

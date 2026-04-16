@@ -55,10 +55,11 @@ class FirebaseManager:
                 
             doc_ref.set(data, merge=True)
         except Exception as e:
-            # Catch 403 SERVICE_DISABLED or other GCP errors silently to prevent app crash
-            if "403" in str(e) or "disabled" in str(e).lower():
-                logger.warning(f"Firestore API is disabled for project. Entering Demo Mode for zone: {zone_id}")
+            # Catch 403 (Disabled) and 404 (Not Found/Not Initialized) gracefully
+            err_msg = str(e).lower()
+            if "403" in err_msg or "disabled" in err_msg or "404" in err_msg or "not exist" in err_msg:
+                logger.info(f"Cloud Firestore: Database not initialized yet. (Running in Demo Mode for {zone_id})")
             else:
-                logger.error(f"Firestore update failed: {e}")
+                logger.error(f"Firestore sync failed: {e}")
 
 fb_manager = FirebaseManager()

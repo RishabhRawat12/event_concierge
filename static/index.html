@@ -230,18 +230,22 @@
                 });
 
                 const infoWindow = new InfoWindow();
-                eventData.forEach(event => {
-                    const marker = new AdvancedMarkerElement({
-                        position: { lat: event.latitude, lng: event.longitude },
-                        map: map,
-                        title: event.name
+                if (Array.isArray(eventData)) {
+                    eventData.forEach(event => {
+                        const marker = new AdvancedMarkerElement({
+                            position: { lat: event.latitude, lng: event.longitude },
+                            map: map,
+                            title: event.name
+                        });
+                        marker.addListener("click", () => {
+                            infoWindow.setContent(`<div style="color: #334155;"><strong>${event.name}</strong><br>${event.topic}</div>`);
+                            infoWindow.open(marker.map, marker);
+                        });
                     });
-                    marker.addListener("click", () => {
-                        infoWindow.setContent(`<div style="color: #334155;"><strong>${event.name}</strong><br>${event.topic}</div>`);
-                        infoWindow.open(marker.map, marker);
-                    });
-                });
-            } catch (err) { console.error(err); }
+                } else {
+                    console.warn("Event Data is missing or invalid. Check backend logs.", eventData);
+                }
+            } catch (err) { console.error("Map initialization failed:", err); }
         }
 
         const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`);
@@ -275,16 +279,25 @@
                     })
                 });
                 const data = await res.json();
-                const container = document.getElementById('itineraryContent');
-                container.innerHTML = '';
-                data.itinerary.forEach(item => {
-                    const div = document.createElement('div');
-                    div.className = 'itinerary-item';
-                    div.innerHTML = `<h3>${item.event_name}</h3><p>${item.start_time} - ${item.end_time}</p><p style="font-size: 0.85rem; opacity: 0.8;">${item.walking_directions}</p>`;
-                    container.appendChild(div);
-                });
-                document.getElementById('itinerarySection').style.display = 'block';
-            } catch (err) { alert(err.message); }
+                
+                if (res.ok && data.itinerary && Array.isArray(data.itinerary)) {
+                    const container = document.getElementById('itineraryContent');
+                    container.innerHTML = '';
+                    data.itinerary.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = 'itinerary-item';
+                        div.innerHTML = `<h3>${item.event_name}</h3><p>${item.start_time} - ${item.end_time}</p><p style="font-size: 0.85rem; opacity: 0.8;">${item.walking_directions}</p>`;
+                        container.appendChild(div);
+                    });
+                    document.getElementById('itinerarySection').style.display = 'block';
+                } else {
+                    const errorMsg = data.message || data.error || "Failed to generate optimized itinerary.";
+                    alert(`⚠️ AI Orchestration Warning: ${errorMsg}`);
+                }
+            } catch (err) { 
+                console.error("Itinerary fetch failed:", err);
+                alert("Connection error: Unable to reach the Agentic Service.");
+            }
             finally { btn.disabled = false; btn.textContent = 'Compute Itinerary'; }
         });
 

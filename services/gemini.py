@@ -15,7 +15,7 @@ class GeminiService:
     def __init__(self) -> None:
         self.api_key = settings.GEMINI_API_KEY
         self.client = genai.Client(api_key=self.api_key)
-        self.model_id = "gemini-2.0-flash" 
+        self.model_id = "gemini-1.5-flash" 
         self.mock_events = []
         self.router = None
 
@@ -106,12 +106,12 @@ class GeminiService:
 
         try:
             # Create a generative session with tools enabled
-            chat = self.client.chats.create(
+            chat = self.client.aio.chats.create(
                 model=self.model_id, 
                 config=types.GenerateContentConfig(tools=self._get_tools())
             )
             
-            response = await chat.send_message_async(prompt)
+            response = await chat.send_message(prompt)
             
             # Agentic Loop: Handle tool calls (supports multi-turn)
             while response.candidates[0].content.parts[0].function_call:
@@ -122,7 +122,7 @@ class GeminiService:
                 logger.info(f"AI Reasoning: Calling tool '{tool_name}' with {tool_args}")
                 result = tools_map[tool_name](**tool_args)
                 
-                response = await chat.send_message_async(
+                response = await chat.send_message(
                     types.Content(
                         parts=[types.Part(function_response=types.FunctionResponse(name=tool_name, response=json.loads(result)))]
                     )
