@@ -394,6 +394,7 @@
             btn.disabled = true;
             btn.setAttribute('aria-busy', 'true');
             btn.textContent = 'Processing...';
+            try {
                 const response = await fetch('/api/staff/zone-action', {
                     method: 'POST',
                     headers: { 
