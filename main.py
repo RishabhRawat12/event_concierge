@@ -66,11 +66,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         # Hardened CSP for production: allows maps, fonts, and specific external workers/frames
+        # Added exceptions for Swagger UI (Docs) dependencies
         response.headers["Content-Security-Policy"] = (
             "default-src 'self' https://maps.googleapis.com https://fonts.gstatic.com; "
-            "script-src 'self' 'unsafe-inline' https://maps.googleapis.com; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-            "img-src 'self' data: https://*.googleapis.com https://*.gstatic.com *.ggpht.com; "
+            "script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
+            "img-src 'self' data: https://*.googleapis.com https://*.gstatic.com *.ggpht.com https://fastapi.tiangolo.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "connect-src 'self' https://maps.googleapis.com wss: ws:; "
             "worker-src 'self' blob:; "
