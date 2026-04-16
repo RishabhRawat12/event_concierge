@@ -38,20 +38,27 @@ class FirebaseManager:
     async def update_zone_status(self, zone_id: str, congestion_level: int, alert: str = None):
         """
         Updates the congestion level for a specific zone in real-time Firestore.
-        This enables the 'Live Sync' experience scores.
+        Gracefully handles cases where the API is disabled (GCP 403).
         """
         db = self.get_db()
         if not db:
             return
 
-        doc_ref = db.collection("zones").document(zone_id)
-        data = {
-            "congestion_level": congestion_level,
-            "last_updated": firestore.SERVER_TIMESTAMP
-        }
-        if alert:
-            data["active_alert"] = alert
-            
-        doc_ref.set(data, merge=True)
+        try:
+            doc_ref = db.collection("zones").document(zone_id)
+            data = {
+                "congestion_level": congestion_level,
+                "last_updated": firestore.SERVER_TIMESTAMP
+            }
+            if alert:
+                data["active_alert"] = alert
+                
+            doc_ref.set(data, merge=True)
+        except Exception as e:
+            # Catch 403 SERVICE_DISABLED or other GCP errors silently to prevent app crash
+            if "403" in str(e) or "disabled" in str(e).lower():
+                logger.warning(f"Firestore API is disabled for project. Entering Demo Mode for zone: {zone_id}")
+            else:
+                logger.error(f"Firestore update failed: {e}")
 
 fb_manager = FirebaseManager()

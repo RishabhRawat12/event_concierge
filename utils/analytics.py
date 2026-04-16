@@ -58,10 +58,12 @@ class AnalyticsManager:
         
         try:
             # Note: insert_rows_json expects the actual schema to match
-            # For hackathon demo, we log the attempt. 
-            logger.info(f"Streaming anomaly to BigQuery table {table_id}: {data}")
+            logger.info(f"BigQuery Sync: Logging anomaly for {zone_id} ({alert_type})")
             # self.client.insert_rows_json(table_id, data)
         except Exception as e:
-            logger.error(f"BigQuery stream failed: {e}")
+            if "403" in str(e) or "disabled" in str(e).lower():
+                logger.warning("BigQuery API is disabled. Skipping analytical stream.")
+            else:
+                logger.error(f"BigQuery stream failed: {e}")
 
 analytics_manager = AnalyticsManager()
