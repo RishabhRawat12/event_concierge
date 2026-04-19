@@ -1,7 +1,7 @@
 """
-Agentic AI orchestration service powered by Vertex AI (Gemini 1.5 Flash).
-Manages multi-turn tool use, situational grounding, and tactical protocol generation.
-Demonstrates enterprise-grade GCP integration with real-time digital twin state.
+Vertex AI Agent Service for venue orchestration.
+Utilizes Gemini 1.5 Flash for multimodal reasoning and tool-integrated grounding.
+Interfaces with Firestore for state management and local Dijkstra engines for routing.
 """
 import logging
 import random
@@ -13,8 +13,6 @@ from vertexai.generative_models import (
     GenerativeModel,
     Tool,
     FunctionDeclaration,
-    Content,
-    Part,
     GenerationConfig
 )
 
@@ -27,7 +25,7 @@ from .spatial_router import spatial_router
 logger = logging.getLogger(__name__)
 
 class AgentService:
-    """Orchestrates agentic reasoning loops and situational grounding via Vertex AI."""
+    """Orchestrates LLM-based reasoning for attendee and staff workflows."""
 
     def __init__(self) -> None:
         vertexai.init(project=settings.GOOGLE_CLOUD_PROJECT, location="us-central1")
@@ -37,12 +35,12 @@ class AgentService:
         )
 
     def _get_tools(self) -> Tool:
-        """Defines the tactical toolset for agentic grounding (Enterprise Vertex AFC)."""
+        """Defines the function calling schema for external tool integration."""
         return Tool(
             function_declarations=[
                 FunctionDeclaration(
                     name="calculate_optimal_route",
-                    description="Calculates shortest spatial paths between event IDs using a Dijkstra engine.",
+                    description="Retrieves shortest paths between event nodes using Dijkstra routing.",
                     parameters={
                         "type": "object",
                         "properties": {
@@ -54,7 +52,7 @@ class AgentService:
                 ),
                 FunctionDeclaration(
                     name="get_zone_congestion",
-                    description="Queries real-time crowd status from the digital twin (Firestore).",
+                    description="Queries real-time Firestore document state for zone density.",
                     parameters={
                         "type": "object",
                         "properties": {
@@ -65,11 +63,11 @@ class AgentService:
                 ),
                 FunctionDeclaration(
                     name="search_events",
-                    description="Filters event registry by topical relevance or name.",
+                    description="Filters in-memory event index by topical keywords.",
                     parameters={
                         "type": "object",
                         "properties": {
-                            "query": {"type": "string", "description": "Topic or event name"}
+                            "query": {"type": "string"}
                         },
                         "required": ["query"]
                     }
@@ -78,41 +76,34 @@ class AgentService:
         )
 
     async def get_zone_congestion(self, zone_id: str) -> str:
-        """Grounding tool for situational venue awareness. Queries live Firestore state."""
-        status_data = await fb_manager.get_zone_status(zone_id)
+        """Grounding tool for live venue state retrieval."""
+        data = await fb_manager.get_zone_status(zone_id)
         return json.dumps({
             "zone_id": zone_id, 
-            "status": status_data["status"],
-            "congestion_level": status_data["congestion"],
-            "timestamp": "Real-time Grounded"
+            "status": data["status"],
+            "congestion": data["congestion"]
         })
 
     async def generate_itinerary(
         self, 
         constraints: UserConstraints, 
         distance_matrix_info: str, 
-        current_weather: Optional[str] = "Clear"
+        weather: Optional[str] = "Clear"
     ) -> ItineraryResponse:
-        """
-        Agentic orchestration loop for attendee itinerary synthesis via Vertex AI.
-        """
+        """Synthesizes constrained conference schedules using generative reasoning."""
         prompt = f"""
-        Objective: Provide background suggestions for a spatial-optimized conference itinerary.
-        Attendee Constraints: {constraints.model_dump_json()}
-        Weather Context: {current_weather}
+        System Role: Venue Orchestration Assistant
+        Context: {weather} conditions.
+        Target Constraints: {constraints.model_dump_json()}
         
-        Role: Tactical Assistant
-        1. Suggest optimal paths based on calculate_optimal_route.
-        2. Filter suggestions via get_zone_congestion to maintain safe crowd density.
-        3. Output should be a refined ItineraryResponse JSON object.
+        Operation:
+        1. Resolve paths via calculate_optimal_route.
+        2. Validate occupancy via get_zone_congestion.
+        3. Return a serialized ItineraryResponse object.
         """
 
         try:
-            # Vertex AI AFC (Automatic Function Calling) Orchestration
             chat = self._model.start_chat()
-            
-            # Note: For strict AFC in vertexai, we often handle the loop or use specific config
-            # Here we demonstrate the enterprise-ready response handling
             response = await chat.send_message_async(
                 prompt,
                 generation_config=GenerationConfig(
@@ -141,37 +132,35 @@ class AgentService:
             )
             
             if not response.text:
-                return await self._generate_simulated_itinerary(constraints, current_weather or "Clear")
-                
+                return await self._generate_simulated_itinerary(constraints, weather or "Clear")
             return ItineraryResponse.model_validate_json(response.text)
 
         except Exception as e:
-            logger.error(f"Vertex Orchestration exception: {e}. Engaging Resistance Fallback.")
-            return await self._generate_simulated_itinerary(constraints, current_weather or "Clear")
+            logger.error(f"Inference exception: {e}")
+            return await self._generate_simulated_itinerary(constraints, weather or "Clear")
 
     async def _generate_simulated_itinerary(self, constraints: UserConstraints, weather: str) -> ItineraryResponse:
-        """[Shadow-Engine] Deterministic fallback for continuous service availability."""
+        """Fallback mechanism for deterministic itinerary generation."""
         targets = [
             e for e in vector_index.mock_events 
             if any(t.lower() in e['topic'].lower() for t in constraints.preferred_topics)
         ] or vector_index.mock_events[:3]
         
-        prefix = random.choice(["AI-Orchestrated: ", "Spatial-Path: ", "Smart-Flow: "])
         itinerary = []
         for i, event in enumerate(targets[:3]):
             itinerary.append(Event(
                 event_name=event['name'],
                 start_time=f"{9 + (i*2)}:00 AM",
                 end_time=f"{10 + (i*2)}:30 AM",
-                walking_directions=f"{prefix}Routing to {event['address']} via local mesh engine.",
+                walking_directions=f"Pathing to {event['name']} via internal routing engine.",
                 transition_time_seconds=600
             ))
             
         return ItineraryResponse(current_weather=weather, itinerary=itinerary, simulated=True)
 
     async def generate_staff_protocol(self, zone_id: str, alert_type: str) -> StaffActionResponse:
-        """Synthesizes tactical protocols for personnel deployment via Vertex AI."""
-        prompt = f"Tactical Alert -- Zone: {zone_id}, Trigger: {alert_type}. Synthesize protocol."
+        """Generates personnel deployment protocols based on situational triggers."""
+        prompt = f"Zone: {zone_id}, Trigger: {alert_type}. Generate deployment protocol."
         try:
             response = await self._model.generate_content_async(
                 prompt,
@@ -186,19 +175,16 @@ class AgentService:
                     }
                 )
             )
-            
             if not response.text:
                 return self._simulated_staff_fallback(zone_id, alert_type)
-
             return StaffActionResponse.model_validate_json(response.text)
-        except Exception as e:
-            logger.error(f"Staff reasoning failure: {e}. Falling back to fixed protocols.")
+        except Exception:
             return self._simulated_staff_fallback(zone_id, alert_type)
 
     def _simulated_staff_fallback(self, zone_id: str, alert_type: str) -> StaffActionResponse:
-        """Deterministic tactical fallback for staff protocols."""
+        """Deterministic protocol fallback for staff coordination."""
         return StaffActionResponse(
-            protocol=f"PROTOCOL-ALPHA: {alert_type} detected at {zone_id}. Dispatching Unit Sigma-9.",
+            protocol=f"Standard Protocol: {alert_type} in {zone_id}. Dispatch nearby unit.",
             simulated=True
         )
 
