@@ -1,6 +1,29 @@
-.env
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 .venv/
-service-account.json
 venv/
+ENV/
+.env
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+.eslintcache
+
+# Firebase
+service-account.json
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
