@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { MapPin, Clock, Star, Info } from 'lucide-react';
 import { sanitizeHtml } from '../../utils/sanitizer';
 
@@ -8,10 +8,16 @@ interface ItineraryDisplayProps {
 }
 
 const ItineraryDisplay: React.FC<ItineraryDisplayProps> = ({ itinerary }) => {
+  const shouldReduceMotion = useReducedMotion();
+  
   if (!itinerary) return null;
 
   return (
-    <div className="flex flex-col gap-8 mt-12">
+    <div 
+      className="flex flex-col gap-8 mt-12"
+      aria-live="polite"
+      aria-relevant="additions text"
+    >
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold mb-2">Your Tactical Protocol</h2>
@@ -24,14 +30,15 @@ const ItineraryDisplay: React.FC<ItineraryDisplayProps> = ({ itinerary }) => {
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-6">
+      <div className="grid grid-cols-1 gap-6" role="list">
         <AnimatePresence mode="popLayout">
           {itinerary.events.map((event: any, index: number) => (
             <motion.div
               key={event.id || index}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              role="listitem"
+              initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -20 }}
+              animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
+              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95 }}
               transition={{ delay: index * 0.1 }}
               className="glass-card p-6 flex flex-col md:flex-row gap-6 relative overflow-hidden group"
             >
@@ -55,10 +62,10 @@ const ItineraryDisplay: React.FC<ItineraryDisplayProps> = ({ itinerary }) => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-[var(--text-secondary)] mb-4">
                   <div className="flex items-center gap-2">
-                    <Clock size={16} /> {event.start_time} - {event.end_time}
+                    <Clock size={16} aria-hidden="true" /> {event.start_time} - {event.end_time}
                   </div>
                   <div className="flex items-center gap-2">
-                    <MapPin size={16} /> {event.location_name || 'Moscone Center'}
+                    <MapPin size={16} aria-hidden="true" /> {event.location_name || 'Moscone Center'}
                   </div>
                 </div>
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 
 interface LayoutProps {
@@ -8,6 +8,8 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, title }) => {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <div className="min-h-screen relative">
       {/* Dynamic Background Elements */}
@@ -19,8 +21,8 @@ const Layout: React.FC<LayoutProps> = ({ children, title }) => {
       <header className="p-6 border-b border-[var(--glass-border)] glass-card rounded-none sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <motion.h1 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
+            initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: -20 }}
+            animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
             className="text-2xl font-bold neon-text-cyan"
             id="main-nav-title"
           >
@@ -37,15 +39,15 @@ const Layout: React.FC<LayoutProps> = ({ children, title }) => {
 
       <main className="max-w-7xl mx-auto p-6" id="main-content">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+          animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
           {children}
         </motion.div>
       </main>
 
-      {/* Accessibility Live Region */}
+      {/* Accessibility Live Region for Dynamic Updates */}
       <div className="sr-only" aria-live="polite" id="a11y-announcer"></div>
     </div>
   );

@@ -2,11 +2,13 @@
 Google Maps Platform integration for spatial transition analysis.
 Computes high-performance accessibility metrics via Distance Matrix API.
 Uses native httpx for asynchronous REST calls to avoid SDK bottlenecks.
+Implements true concurrency via asyncio.gather for parallel batch processing.
 """
 import hashlib
 import json
 import logging
-from typing import Dict, List, Optional
+import asyncio
+from typing import Dict, List, Optional, Any
 import httpx
 from utils.config import settings
 from utils.redis import cache
@@ -32,7 +34,7 @@ class MapsService:
         dest_keys = sorted([f"{loc['latitude']},{loc['longitude']}" for loc in destinations])
         
         key_raw = f"{json.dumps(orig_keys)}:{json.dumps(dest_keys)}"
-        cache_key = f"maps:walking:v2:{hashlib.sha256(key_raw.encode()).hexdigest()}"
+        cache_key = f"maps:walking:v3:{hashlib.sha256(key_raw.encode()).hexdigest()}"
         
         cached = await cache.get(cache_key)
         if cached:
@@ -51,11 +53,13 @@ class MapsService:
         origins: List[Dict[str, float]], 
         destinations: List[Dict[str, float]]
     ) -> Dict[str, int]:
-        """Internal native async batching logic using httpx."""
+        """Internal native async batching logic using true concurrent execution."""
         combined: Dict[str, int] = {}
-        
-        # Batching remains necessary (Google API Constraint: origins x destinations <= 100)
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        tasks = []
+        batch_meta = []
+
+        # 1. Prepare all concurrent batches
+        async with httpx.AsyncClient(timeout=10.0) as client:
             for i in range(0, len(origins), 10):
                 o_batch = origins[i:i+10]
                 o_str = "|".join([f"{loc['latitude']},{loc['longitude']}" for loc in o_batch])
@@ -70,23 +74,36 @@ class MapsService:
                         "key": self.api_key
                     }
                     
-                    response = await client.get(self.base_url, params=params)
-                    resp_data = response.json()
-                    
-                    if resp_data.get("status") != "OK":
-                        logger.error(f"Maps API Error Response: {resp_data.get('status')}")
-                        continue
-                    
-                    rows = resp_data.get("rows", [])
-                    o_locs = [f"{loc['latitude']},{loc['longitude']}" for loc in o_batch]
-                    d_locs = [f"{loc['latitude']},{loc['longitude']}" for loc in d_batch]
-                    
-                    for r_idx, row in enumerate(rows):
-                        orig_key = o_locs[r_idx]
-                        for e_idx, element in enumerate(row.get("elements", [])):
-                            dest_key = d_locs[e_idx]
-                            if element.get("status") == "OK":
-                                combined[f"{orig_key}|{dest_key}"] = element["duration"]["value"]
+                    tasks.append(client.get(self.base_url, params=params))
+                    batch_meta.append((o_batch, d_batch))
+
+            # 2. Execute concurrently (Winner Tier Performance)
+            responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # 3. Process merged results
+            for idx, response in enumerate(responses):
+                if isinstance(response, Exception):
+                    logger.error(f"Concurrent Maps Batch Failure: {response}")
+                    continue
+                
+                resp_data = response.json()
+                if resp_data.get("status") != "OK":
+                    logger.error(f"Maps API Error: {resp_data.get('status')}")
+                    continue
+
+                o_batch, d_batch = batch_meta[idx]
+                rows = resp_data.get("rows", [])
+                o_locs = [f"{loc['latitude']},{loc['longitude']}" for loc in o_batch]
+                d_locs = [f"{loc['latitude']},{loc['longitude']}" for loc in d_batch]
+
+                for r_idx, row in enumerate(rows):
+                    if r_idx >= len(o_locs): break
+                    orig_key = o_locs[r_idx]
+                    for e_idx, element in enumerate(row.get("elements", [])):
+                        if e_idx >= len(d_locs): break
+                        dest_key = d_locs[e_idx]
+                        if element.get("status") == "OK":
+                            combined[f"{orig_key}|{dest_key}"] = element["duration"]["value"]
         
         return combined
 

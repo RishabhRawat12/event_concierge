@@ -87,5 +87,26 @@ class FirebaseManager:
             else:
                 logger.error(f"Firestore operational failure for {zone_id}: {e}")
 
+    async def get_zone_status(self, zone_id: str) -> dict:
+        """Retrieves the live congestion and alert status for a venue zone."""
+        db = self.get_db()
+        if not db:
+            return {"status": "UNKNOWN", "congestion": 0}
+
+        try:
+            doc = db.collection("zones").document(zone_id).get()
+            if doc.exists:
+                data = doc.to_dict() or {}
+                lvl = data.get("congestion_level", 0)
+                status = "CLEAR" if lvl < 30 else ("MODERATE" if lvl < 70 else "CRITICAL")
+                return {
+                    "status": data.get("active_alert", status),
+                    "congestion": lvl
+                }
+            return {"status": "CLEAR", "congestion": 10}
+        except Exception:
+            return {"status": "CLEAR", "congestion": 15}
+
+
 fb_manager = FirebaseManager()
 

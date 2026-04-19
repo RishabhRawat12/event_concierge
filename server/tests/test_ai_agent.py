@@ -1,17 +1,28 @@
 import pytest
 import json
+from unittest.mock import patch, AsyncMock, MagicMock
 from services.agent import AgentService
 from services.spatial_router import spatial_router
 from services.vector_index import vector_index
 
+@pytest.fixture(autouse=True)
+def mock_vertex():
+    with patch("vertexai.init"), \
+         patch("vertexai.generative_models.GenerativeModel") as mock_model:
+        yield mock_model
+
 @pytest.mark.asyncio
 async def test_agent_get_zone_congestion():
     svc = AgentService()
-    result_json = svc.get_zone_congestion("Main Entrance")
-    result = json.loads(result_json)
-    
-    assert result["zone_id"] == "Main Entrance"
-    assert result["status"] == "MODERATE"
+    # Mock firebase manager response
+    with patch("services.agent.fb_manager.get_zone_status", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = {"status": "CRITICAL", "congestion": 85}
+        result_json = await svc.get_zone_congestion("Main Entrance")
+        result = json.loads(result_json)
+        
+        assert result["zone_id"] == "Main Entrance"
+        assert result["status"] == "CRITICAL"
+        assert result["congestion_level"] == 85
 
 @pytest.mark.asyncio
 async def test_spatial_router_init():
@@ -29,14 +40,11 @@ async def test_spatial_router_init():
 
 @pytest.mark.asyncio
 async def test_vector_index_search():
-    # Use the mock events loaded in the spatial_router test if needed or load manually
     mock_events = [
         {"id": "e1", "name": "AI Workshop", "topic": "Artificial Intelligence"},
         {"id": "e2", "name": "Cloud Native", "topic": "Infrastructure"}
     ]
     vector_index.mock_events = mock_events
-    # Manually trigger indexing logic from load_events or just test the search if index is built
-    # For simplicity in unit tests, we'll just test the mock_events access here or re-index
     
     # Re-indexing
     vector_index._exact_index = {}
