@@ -28,7 +28,7 @@ class AnalyticsManager:
         except Exception as e:
             logger.error(f"Failed to initialize BigQuery: {e}")
 
-    async def log_event_anomaly(self, zone_id: str, alert_type: str, severity: str = "HIGH"):
+    async def log_event_anomaly(self, zone_id: str, alert_type: str, severity: str = "HIGH") -> None:
         """
         Streams event anomalies into BigQuery for enterprise-grade observability 
         and Looker Studio reporting.

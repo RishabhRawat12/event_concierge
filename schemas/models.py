@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 from typing import List, Optional, Annotated
+from datetime import datetime
 
 class Coordinates(BaseModel):
     latitude: float = Field(..., ge=-90, le=90, description="Latitude of the location")
@@ -11,6 +12,21 @@ class UserConstraints(BaseModel):
     end_time: str = Field(..., pattern=r"^\d{1,2}:\d{2} [AP]M$", description="End time (e.g. 05:00 PM)")
     preferred_topics: List[Annotated[str, StringConstraints(min_length=2, max_length=50)]] = Field(..., min_length=1)
 
+    @model_validator(mode='after')
+    def validate_time_sequence(self) -> 'UserConstraints':
+        fmt = "%I:%M %p"
+        try:
+            start = datetime.strptime(self.start_time, fmt)
+            end = datetime.strptime(self.end_time, fmt)
+            if start >= end:
+                raise ValueError("start_time must be strictly before end_time")
+        except ValueError as e:
+            if "start_time" in str(e):
+                raise e
+            # If parsing fails, it should have been caught by regex, but we handle it just in case
+            raise ValueError(f"Invalid time format. Expected 'HH:MM AM/PM', got '{self.start_time}' or '{self.end_time}'")
+        return self
+
 class Event(BaseModel):
     event_name: str = Field(..., description="Name of the chosen event from the static mock events list")
     start_time: str = Field(..., description="Start time formatted appropriately (e.g. 10:00 AM)")
@@ -21,6 +37,7 @@ class Event(BaseModel):
 class ItineraryResponse(BaseModel):
     current_weather: Optional[str] = Field(default=None, description="The prevailing weather during the itinerary calculation")
     itinerary: List[Event] = Field(..., description="Ordered list of events forming the optimal, conflict-free itinerary")
+    simulated: bool = Field(default=False, description="True if hit with quota limits and result is locally simulated.")
 
 class StaffActionRequest(BaseModel):
     zone_id: str = Field(..., description="The unique identifier for the targeted Zone (e.g. Zone B)")
@@ -28,3 +45,4 @@ class StaffActionRequest(BaseModel):
 
 class StaffActionResponse(BaseModel):
     protocol: str = Field(..., description="The AI-orchestrated response protocol for personnel deployment")
+    simulated: bool = Field(default=False, description="True if hit with quota limits and result is locally simulated.")

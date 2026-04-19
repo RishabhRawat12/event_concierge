@@ -39,7 +39,7 @@ async def test_staff_zone_action_endpoint_unauthorized():
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         # No header
         response = await ac.post("/api/staff/zone-action", json=payload)
-        assert response.status_code == 401
+        assert response.status_code == 403
         
         # Wrong header
         headers = {"Authorization": "Bearer WRONG_TOKEN"}

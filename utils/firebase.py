@@ -3,6 +3,7 @@ from firebase_admin import credentials, firestore
 import logging
 from utils.config import settings
 import os
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +31,12 @@ class FirebaseManager:
         except Exception as e:
             logger.error(f"Failed to initialize Firebase: {e}")
 
-    def get_db(self):
+    def get_db(self) -> Any:
         if not self._initialized:
             self.connect()
         return self.db
 
-    async def update_zone_status(self, zone_id: str, congestion_level: int, alert: str = None):
+    async def update_zone_status(self, zone_id: str, congestion_level: int, alert: str = None) -> None:
         """
         Updates the congestion level for a specific zone in real-time Firestore.
         Gracefully handles cases where the API is disabled (GCP 403).
