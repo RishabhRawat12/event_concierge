@@ -8,7 +8,7 @@ from typing import Optional
 import firebase_admin # type: ignore
 from firebase_admin import credentials, firestore, auth
 from google.cloud.firestore_v1.client import Client as FirestoreClient
-from utils.config import settings
+from .config import settings
 
 logger = logging.getLogger(__name__)
 

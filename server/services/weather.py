@@ -4,7 +4,7 @@ Provides real-time weather context to the agentic orchestration engine.
 """
 import logging
 import httpx
-from utils.config import settings
+from infrastructure.config import settings
 
 logger = logging.getLogger(__name__)
 

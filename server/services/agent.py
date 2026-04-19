@@ -19,8 +19,8 @@ from vertexai.generative_models import (
 )
 
 from schemas.models import Event, ItineraryResponse, StaffActionResponse, UserConstraints
-from utils.config import settings
-from utils.firebase import fb_manager
+from infrastructure.config import settings
+from infrastructure.firebase import fb_manager
 from .vector_index import vector_index
 from .spatial_router import spatial_router
 
@@ -97,14 +97,14 @@ class AgentService:
         Agentic orchestration loop for attendee itinerary synthesis via Vertex AI.
         """
         prompt = f"""
-        Objective: Orchestrate a conflict-free, spatial-optimized conference itinerary.
+        Objective: Provide background suggestions for a spatial-optimized conference itinerary.
         Attendee Constraints: {constraints.model_dump_json()}
         Weather Context: {current_weather}
         
-        Mandatory Protocol:
-        1. Ground reasoning in calculate_optimal_route.
-        2. Inspect situation via get_zone_congestion to avoid CRITICAL density.
-        3. Response remains strictly an ItineraryResponse JSON object.
+        Role: Tactical Assistant
+        1. Suggest optimal paths based on calculate_optimal_route.
+        2. Filter suggestions via get_zone_congestion to maintain safe crowd density.
+        3. Output should be a refined ItineraryResponse JSON object.
         """
 
         try:

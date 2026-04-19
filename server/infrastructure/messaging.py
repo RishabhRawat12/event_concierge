@@ -1,7 +1,7 @@
 import logging
 import json
 from typing import Any, Dict, Optional
-from utils.config import settings
+from .config import settings
 
 # Production-grade Orchestration: Cloud Pub/Sub
 try:

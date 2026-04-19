@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from google.cloud import bigquery
 from google.cloud import logging as cloud_logging
-from utils.config import settings
+from .config import settings
 
 logger = logging.getLogger(__name__)
 

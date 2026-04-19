@@ -5,7 +5,7 @@ Implements Dijkstra's algorithm for conflict-free itinerary orchestration.
 import json
 import logging
 from typing import Any, Dict, List, Tuple, Optional
-from utils.algorithms import DijkstraRouter
+from .algorithms import DijkstraRouter
 
 logger = logging.getLogger(__name__)
 

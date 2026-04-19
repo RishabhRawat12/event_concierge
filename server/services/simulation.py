@@ -6,8 +6,8 @@ import asyncio
 import logging
 import random
 from typing import List, Optional
-from utils.firebase import fb_manager
-from utils.analytics import analytics_manager
+from infrastructure.firebase import fb_manager
+from infrastructure.analytics import analytics_manager
 
 logger = logging.getLogger(__name__)
 

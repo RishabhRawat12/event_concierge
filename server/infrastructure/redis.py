@@ -12,18 +12,17 @@ from .config import settings
 logger = logging.getLogger(__name__)
 
 class AsyncCache:
-    """Resilient Redis cache with local memory failover capability."""
+    """Resilient Redis cache & Pub/Sub for high-performance orchestration."""
 
     def __init__(self) -> None:
         self.redis_url = os.getenv("REDIS_URL", settings.REDIS_URL)
         self.client: Optional[redis.Redis] = None
         self._memory_buckets: Dict[str, List[float]] = {}
         self._connection_warned = False
-        # Single-Flight mechanism: prevents multiple concurrent requests for the same key
         self._locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
 
     async def connect(self) -> None:
-        """Initializes the Redis connection pool with strict timeout protection."""
+        """Initializes the Redis connection pool."""
         if self.client:
             return
 
@@ -32,16 +31,16 @@ class AsyncCache:
                 self.redis_url,
                 decode_responses=True,
                 socket_connect_timeout=settings.REDIS_TIMEOUT_SECONDS,
-                max_connections=50, # Scaled for bursty orchestration loads
+                max_connections=50,
                 retry_on_timeout=True
             )
             await self.client.ping()
             if not self._connection_warned:
-                logger.info("Redis infrastructure synchronized (Connection Pooling active).")
+                logger.info("Redis infrastructure synchronized (Pub/Sub active).")
                 self._connection_warned = True
         except Exception as e:
             if not self._connection_warned:
-                logger.warning(f"Redis link failed: {e}. Engaging high-fidelity memory fallback.")
+                logger.warning(f"Redis link failed: {e}. Engaging memory fallback.")
                 self._connection_warned = True
             self.client = None
 
@@ -50,11 +49,29 @@ class AsyncCache:
         if self.client:
             try:
                 await self.client.aclose()
-                logger.info("Redis connection pool released.")
-            except Exception as e:
-                logger.debug(f"Shadow error during Redis shutdown: {e}")
+            except Exception:
+                pass
             finally:
                 self.client = None
+
+    async def publish(self, channel: str, message: Any) -> int:
+        """Publishes a tactical payload to a Redis channel for real-time distribution."""
+        if not self.client:
+            return 0
+        try:
+            payload = json.dumps(message)
+            return await self.client.publish(channel, payload)
+        except Exception as e:
+            logger.debug(f"PubSub broadcasting failure: {e}")
+            return 0
+
+    async def subscribe(self, channel: str):
+        """Returns a PubSub object subscribed to the specified channel."""
+        if not self.client:
+            return None
+        ps = self.client.pubsub()
+        await ps.subscribe(channel)
+        return ps
 
     async def get_or_compute(
         self, 
@@ -64,67 +81,46 @@ class AsyncCache:
         *args: Any, 
         **kwargs: Any
     ) -> Any:
-        """
-        Implements the 'Single-Flight' pattern.
-        Ensures that for a cache miss, only one request executes the compute_func.
-        """
-        # 1. Fast Path: Check cache
+        """Implements the 'Single-Flight' pattern."""
         cached = await self.get(key)
         if cached is not None:
             return cached
 
-        # 2. Get or create a lock for this specific key
         lock = self._locks.get(key)
         if not lock:
             lock = asyncio.Lock()
             self._locks[key] = lock
 
         async with lock:
-            # 3. Double-check cache (it may have been filled by another request)
             cached = await self.get(key)
             if cached is not None:
                 return cached
             
-            # 4. Compute and cache
             result = await compute_func(*args, **kwargs)
             if result is not None:
                 await self.set(key, result, ex=ttl)
             return result
 
-    @staticmethod
-    def hash_key(prefix: str, content: str) -> str:
-        """Generates a deterministic, collision-resistant cache key."""
-        content_hash = hashlib.blake2b(content.encode(), digest_size=16).hexdigest()
-        return f"{prefix}:{content_hash}"
-
     async def get(self, key: str) -> Optional[Any]:
-        """Retrieves and deserializes a cached object."""
         if not self.client:
             return None
         try:
             val = await self.client.get(key)
             return json.loads(val) if val else None
-        except (redis.RedisError, json.JSONDecodeError) as e:
-            logger.debug(f"Cache retrieval failure for {key}: {e}")
+        except Exception:
             return None
 
     async def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
-        """Serializes and stores an object with an optional TTL."""
         if not self.client:
             return
         try:
             await self.client.set(key, json.dumps(value), ex=ex)
-        except redis.RedisError as e:
-            logger.debug(f"Cache storage failure for {key}: {e}")
+        except Exception:
+            pass
 
     async def is_rate_limited(self, key: str, capacity: int = 10, window: int = 60) -> bool:
-        """
-        Atomic sliding window rate limiter.
-        Prioritizes Redis Lua execution; falls back to local memory on connection failure.
-        """
+        """Atomic sliding window rate limiter."""
         now = time.time()
-        
-        # 1. Distributed Logic (Redis Lua)
         if self.client:
             lua = """
             local key = KEYS[1]
@@ -141,23 +137,16 @@ class AsyncCache:
             return 1
             """
             try:
-                # Use list-based arguments for keys and args to satisfy strict stubs
                 result = await cast(Any, self.client.eval(lua, 1, [key], [str(now), str(capacity), str(window)]))
                 return result == 1
-            except redis.RedisError as e:
-                logger.debug(f"Redis-side rate limit failure: {e}. Sinking to memory.")
+            except Exception:
+                pass
 
-        # 2. Local Fallback (Sliding Window)
         bucket = self._memory_buckets.setdefault(key, [])
-        # Prune expired entries
         self._memory_buckets[key] = [t for t in bucket if t > now - window]
-        
         if len(self._memory_buckets[key]) < capacity:
             self._memory_buckets[key].append(now)
             return False
         return True
-
-cache = AsyncCache()
-
 
 cache = AsyncCache()

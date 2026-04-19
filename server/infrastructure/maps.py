@@ -10,8 +10,8 @@ import logging
 import asyncio
 from typing import Dict, List, Optional, Any
 import httpx
-from utils.config import settings
-from utils.redis import cache
+from .config import settings
+from .redis import cache
 
 logger = logging.getLogger(__name__)
 
