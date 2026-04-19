@@ -11,7 +11,7 @@ async def test_calculate_optimal_route_tool():
         {"id": "e1", "latitude": 37.784261, "longitude": -122.401344},
         {"id": "e2", "latitude": 37.784860, "longitude": -122.400249}
     ]
-    svc.router = DijkstraRouter(mock_events)
+    svc._router = DijkstraRouter(mock_events)
     
     # Manually invoke the tool
     result_json = svc.calculate_optimal_route("e1", "e2")
@@ -35,5 +35,5 @@ async def test_get_zone_congestion_tool():
 async def test_agentic_load_events():
     svc = GeminiService()
     await svc.load_events()
-    assert len(svc.mock_events) > 0
-    assert svc.router is not None
+    assert len(svc._mock_events) > 0
+    assert svc._router is not None

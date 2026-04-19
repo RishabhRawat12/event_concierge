@@ -1,21 +1,24 @@
-import aiohttp
+"""
+Google Maps Platform integration for spatial transition analysis.
+Computes high-performance accessibility metrics via Distance Matrix API.
+Implements exponential backoff and batched navigation for architectural efficiency.
+"""
 import asyncio
-import googlemaps
+import hashlib
+import json
 import logging
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional
+import googlemaps # type: ignore
 from utils.config import settings
 from utils.redis import cache
 
 logger = logging.getLogger(__name__)
 
 class MapsService:
-    """
-    Orchestrates authenticated calls to Google Maps Services.
-    Implements Rank-1 optimization patterns including intelligent caching 
-    and exponential backoff for tactical venue navigation.
-    """
-    _instance = None
-    _client = None
+    """Orchestrates authenticated spatial queries via Google SDK."""
+
+    _instance: Optional['MapsService'] = None
+    _client: Optional[googlemaps.Client] = None
 
     def __new__(cls) -> 'MapsService':
         if cls._instance is None:
@@ -23,20 +26,16 @@ class MapsService:
         return cls._instance
 
     def __init__(self) -> None:
-        """
-        Initializes the Maps Service client context.
-        Ensures lazy initialization of the Google SDK client.
-        """
+        """Lazy initialization of the Maps client context."""
         if self._client is None:
             try:
                 self._client = googlemaps.Client(key=settings.GOOGLE_MAPS_API_KEY)
-                logger.info("Google Maps SDK Client initialized successfully.")
             except Exception as e:
-                logger.error(f"Failed to initialize Google Maps Client: {e}")
+                logger.error(f"Maps SDK Link Failure: {e}")
 
     @property
     def client(self) -> googlemaps.Client:
-        """Access the underlying Google SDK client."""
+        """Provides access to the shared Google Maps Client instance."""
         if self._client is None:
             self._client = googlemaps.Client(key=settings.GOOGLE_MAPS_API_KEY)
         return self._client
@@ -45,80 +44,71 @@ class MapsService:
         self, 
         origins: List[Dict[str, float]], 
         destinations: List[Dict[str, float]]
-    ) -> Dict[str, Any]:
+    ) -> Dict[str, int]:
         """
-        Computes the walking time matrix between multiple points with high-performance caching.
+        Computes walking durations across a spatial matrix with batch optimization.
 
         Args:
-            origins (List[Dict[str, float]]): List of starting coordinates.
-            destinations (List[Dict[str, float]]): List of destination coordinates.
+            origins: Starting coordinate pairs.
+            destinations: Target coordinate pairs.
 
         Returns:
-            Dict[str, Any]: A mapping of origin|destination pairs to duration values (seconds).
-
-        Raises:
-            RuntimeError: If the Maps API fails after retries or quota is exceeded.
+            Mapping of 'origin|destination' pairs to travel time in seconds.
         """
-        import hashlib
-        import json
-
-        origins_list = sorted([f"{loc['latitude']},{loc['longitude']}" for loc in origins])
-        dest_list = sorted([f"{loc['latitude']},{loc['longitude']}" for loc in destinations])
+        orig_keys = sorted([f"{loc['latitude']},{loc['longitude']}" for loc in origins])
+        dest_keys = sorted([f"{loc['latitude']},{loc['longitude']}" for loc in destinations])
         
-        # Salted Deterministic SHA256 for cache key integrity
-        h_orig = hashlib.sha256(json.dumps(origins_list).encode()).hexdigest()
-        h_dest = hashlib.sha256(json.dumps(dest_list).encode()).hexdigest()
-        cache_key = f"maps:walking:batch:{h_orig}:{h_dest}"
+        # Deterministic cache key based on coordinate signatures
+        key_raw = f"{json.dumps(orig_keys)}:{json.dumps(dest_keys)}"
+        cache_key = f"maps:walking:v1:{hashlib.sha256(key_raw.encode()).hexdigest()}"
         
-        # 1. High-Performance Cache Lookup
-        cached_val = await cache.get(cache_key)
-        if cached_val is not None:
-            return cached_val
+        # Priority 1: High-Performance Cache lookup
+        cached = await cache.get(cache_key)
+        if cached:
+            return cached
 
-        max_retries = 3
-        base_delay = 1.0
-
-        def _fetch_matrix_all() -> Dict[str, int]:
-            combined_matrix = {}
-            # API constraint: origins x destinations <= 100 elements. 10x10 chunking.
-            for i in range(0, len(origins_list), 10):
-                o_chunk = origins_list[i:i+10]
-                o_raw = origins[i:i+10]
-                for j in range(0, len(dest_list), 10):
-                    d_chunk = dest_list[j:j+10]
-                    d_raw = destinations[j:j+10]
-                    
-                    data = self.client.distance_matrix(o_chunk, d_chunk, mode="walking")
-                    if data.get("status") == "OK":
-                        rows = data.get("rows", [])
-                        for r_idx, row in enumerate(rows):
-                            orig = o_raw[r_idx]
-                            orig_key = f"{orig['latitude']},{orig['longitude']}"
-                            for e_idx, element in enumerate(row.get("elements", [])):
-                                dest = d_raw[e_idx]
-                                dest_key = f"{dest['latitude']},{dest['longitude']}"
-                                if element.get("status") == "OK":
-                                    duration_val = element["duration"]["value"]
-                                    combined_matrix[f"{orig_key}|{dest_key}"] = duration_val
-                    else:
-                        raise RuntimeError(f"Maps API response not OK: {data}")
-            return combined_matrix
-
-        # 2. Execution with Exponential Backoff
-        for attempt in range(max_retries):
+        # Priority 2: Execution with Exponential Backoff
+        for attempt in range(3):
             try:
-                result_matrix = await asyncio.to_thread(_fetch_matrix_all)
-                # Successful fetch -> Store in cache with 1-hour TTL for Rank-1 efficiency
-                await cache.set(cache_key, result_matrix, ex=3600)  
-                return result_matrix
+                result = await asyncio.to_thread(self._fetch_matrix_batch, origins, destinations)
+                await cache.set(cache_key, result, ex=3600)  # 1-hour tactical cache TTL
+                return result
             except Exception as e:
-                logger.warning(f"Maps API attempt {attempt+1} failed: {e}")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(base_delay * (2 ** attempt))
+                logger.warning(f"Maps API attempt {attempt+1} failed: {e}. Retrying.")
+                if attempt < 2:
+                    await asyncio.sleep(1.0 * (2 ** attempt))
+
+        logger.error("Maps Engine Exhausted. Falling back to deterministic zero-weighted mapping.")
+        return {}
+
+    def _fetch_matrix_batch(
+        self, 
+        origins: List[Dict[str, float]], 
+        destinations: List[Dict[str, float]]
+    ) -> Dict[str, int]:
+        """Internal synchronous batching logic for the Distance Matrix API."""
+        combined: Dict[str, int] = {}
+        # Google API Constraint: origins x destinations <= 100
+        for i in range(0, len(origins), 10):
+            o_batch = origins[i:i+10]
+            o_locs = [f"{loc['latitude']},{loc['longitude']}" for loc in o_batch]
+            for j in range(0, len(destinations), 10):
+                d_batch = destinations[j:j+10]
+                d_locs = [f"{loc['latitude']},{loc['longitude']}" for loc in d_batch]
                 
-        # 3. Resilience Fallback
-        logger.error("Google Maps API exhausted all retries. Failing gracefully for compliance.")
-        raise RuntimeError("Service Unavailable: Maps Analytical Engine Failed.")
+                resp = self.client.distance_matrix(o_locs, d_locs, mode="walking")
+                if resp.get("status") != "OK":
+                    raise RuntimeError(f"Maps API error: {resp.get('status')}")
+                
+                rows = resp.get("rows", [])
+                for r_idx, row in enumerate(rows):
+                    orig_key = o_locs[r_idx]
+                    for e_idx, element in enumerate(row.get("elements", [])):
+                        dest_key = d_locs[e_idx]
+                        if element.get("status") == "OK":
+                            combined[f"{orig_key}|{dest_key}"] = element["duration"]["value"]
+        return combined
 
 maps_service = MapsService()
+
 

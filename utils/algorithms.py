@@ -1,73 +1,100 @@
-import math
+"""
+Tactical routing engine for deterministic crowd orchestration.
+Implements a weighted Dijkstra algorithm for conflict-free venue navigation.
+"""
 import heapq
-from typing import List, Dict, Any, Tuple
+import math
+from typing import Any, Dict, List, Optional, Tuple
 
 class DijkstraRouter:
+    """Computes optimal pedestrian paths across high-density architectural zones."""
+
     def __init__(self, events: List[Dict[str, Any]]):
-        self.events = events
-        # Pre-calculate distances for the graph
-        self.graph = self._build_graph()
-
-    def _haversine(self, lat1, lon1, lat2, lon2) -> float:
         """
-        Calculate the great circle distance between two points 
-        on the earth (specified in decimal degrees)
+        Initializes the router with a set of candidate events.
+        
+        Args:
+            events: List of event dictionaries containing 'id', 'latitude', and 'longitude'.
         """
-        # convert decimal degrees to radians 
-        lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
+        self._events = events
+        # Static graph representation: {origin_id: {dest_id: distance_km}}
+        self._graph: Dict[str, Dict[str, float]] = self._build_graph()
 
-        # haversine formula 
-        dlon = lon2 - lon1 
-        dlat = lat2 - lat1 
-        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-        c = 2 * math.asin(math.sqrt(a)) 
-        r = 6371 # Radius of earth in kilometers. Use 3956 for miles
-        return c * r
+    @staticmethod
+    def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """
+        Calculates the great-circle distance between two points on Earth.
+        Uses the Haversine formula for spherical approximation.
+        """
+        # Earth's radius in kilometers
+        radius = 6371.0 
+        
+        phi1, phi2 = math.radians(lat1), math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlambda = math.radians(lon2 - lon1)
+
+        alpha = (math.sin(dphi / 2)**2 + 
+                 math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2)**2)
+        
+        return 2 * radius * math.atan2(math.sqrt(alpha), math.sqrt(1 - alpha))
 
     def _build_graph(self) -> Dict[str, Dict[str, float]]:
-        """
-        Builds a complete graph where edges represent physical distance 
-        (in km) between event locations.
-        """
-        graph = {}
-        for i, e1 in enumerate(self.events):
+        """Constructs a complete mesh graph representing venue spatiality."""
+        graph: Dict[str, Dict[str, float]] = {}
+        for i, e1 in enumerate(self._events):
             eid1 = e1.get("id", f"e{i}")
             graph[eid1] = {}
-            for j, e2 in enumerate(self.events):
-                if i == j: continue
+            for j, e2 in enumerate(self._events):
+                if i == j:
+                    continue
                 eid2 = e2.get("id", f"e{j}")
-                dist = self._haversine(e1["latitude"], e1["longitude"], e2["latitude"], e2["longitude"])
+                dist = self._haversine(e1["latitude"], e1["longitude"], 
+                                      e2["latitude"], e2["longitude"])
                 graph[eid1][eid2] = dist
         return graph
 
-    def find_optimal_path(self, start_id: str, end_id: str, congestion_map: Dict[str, float] = None) -> Tuple[List[str], float]:
+    def find_optimal_path(
+        self, 
+        start_id: str, 
+        end_id: str, 
+        congestion_map: Optional[Dict[str, float]] = None
+    ) -> Tuple[List[str], float]:
         """
-        Finds the shortest path between two event IDs using Dijkstra's algorithm.
-        Optionally weights edges by congestion levels.
+        Executes a weighted search for the shortest path between two event nodes.
+
+        Args:
+            start_id: Identifier for the origin node.
+            end_id: Identifier for the destination node.
+            congestion_map: Optional mapping of zone IDs to metric penalties.
+
+        Returns:
+            Tuple containing the ordered list of event IDs and the total weighted distance.
         """
-        if start_id not in self.graph or end_id not in self.graph:
+        if start_id not in self._graph or end_id not in self._graph:
             return [], 0.0
 
-        # priority queue (distance, current_node, path)
-        pq = [(0.0, start_id, [start_id])]
-        visited = set()
+        # Min-heap queue: (cumulative_weight, current_id, path_sequence)
+        pq: List[Tuple[float, str, List[str]]] = [(0.0, start_id, [start_id])]
+        visited: Dict[str, float] = {}
 
         while pq:
-            (dist, current, path) = heapq.heappop(pq)
-            if current in visited:
-                continue
-            if current == end_id:
-                return path, dist
+            cost, current, path = heapq.heappop(pq)
             
-            visited.add(current)
+            if current == end_id:
+                return path, cost
+            
+            if current in visited and visited[current] <= cost:
+                continue
+            
+            visited[current] = cost
 
-            for neighbor, weight in self.graph[current].items():
-                if neighbor not in visited:
-                    # Apply congestion penalty (Winning Edge logic)
-                    congestion = congestion_map.get(neighbor, 1.0) if congestion_map else 1.0
-                    weighted_dist = dist + (weight * congestion)
-                    heapq.heappush(pq, (weighted_dist, neighbor, path + [neighbor]))
+            for neighbor, weight in self._graph[current].items():
+                # Apply tactical congestion weighting (Winning Edge pattern)
+                penalty = congestion_map.get(neighbor, 1.0) if congestion_map else 1.0
+                new_cost = cost + (weight * penalty)
+                
+                if neighbor not in visited or visited[neighbor] > new_cost:
+                    heapq.heappush(pq, (new_cost, neighbor, path + [neighbor]))
 
         return [], 0.0
 
-# Singleton-like instantiation will happen in the service layer

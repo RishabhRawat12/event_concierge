@@ -1,4 +1,3 @@
-import pytest
 from utils.algorithms import DijkstraRouter
 
 def test_haversine_accuracy():

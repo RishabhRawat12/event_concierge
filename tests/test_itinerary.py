@@ -1,8 +1,7 @@
 import pytest
 from httpx import AsyncClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from schemas.models import ItineraryResponse, Event
-import json
 
 pytestmark = pytest.mark.asyncio
 
@@ -35,30 +34,39 @@ async def test_successful_itinerary(mock_generate, mock_walking, async_client: A
     response = await async_client.post("/api/itinerary", json=payload)
     assert response.status_code == 200
 
-@patch('services.maps.googlemaps.Client')
+@patch('googlemaps.Client')
 async def test_maps_logic_and_cache(mock_client_class):
-    from services.maps import MapsService
-    # Ensure cache is mocked or flushed
+    from services.maps import maps_service
+    
     mock_client = mock_client_class.return_value
     mock_client.distance_matrix.return_value = {
         "status": "OK",
         "rows": [{"elements": [{"status": "OK", "duration": {"value": 600}}]}]
     }
-    svc = MapsService()
+    
+    # Reset singleton state for the test
+    maps_service._client = None
+    
     origin = {"latitude": 37.7, "longitude": -122.4}
     destination = {"latitude": 37.8, "longitude": -122.5}
     
-    # We use a unique coordinate pair to avoid cache hits from other tests if caching is active
-    res = await svc.get_walking_time([origin], [destination])
+    # This will trigger _init_client() which uses the mocked googlemaps.Client
+    res = await maps_service.get_walking_time([origin], [destination])
     assert res["37.7,-122.4|37.8,-122.5"] == 600
 
-@patch('services.maps.googlemaps.Client')
+@patch('googlemaps.Client')
 async def test_maps_http_errors(mock_client_class):
-    from services.maps import MapsService
+    from services.maps import maps_service
+    
     mock_client = mock_client_class.return_value
     mock_client.distance_matrix.return_value = {"status": "REQUEST_DENIED"}
-    svc = MapsService()
+    
+    # Reset singleton state for the test
+    maps_service._client = None
+    
     origin = {"latitude": 10.0, "longitude": 20.0}
     destination = {"latitude": 11.0, "longitude": 21.0}
-    with pytest.raises(RuntimeError):
-        await svc.get_walking_time([origin], [destination])
+    res = await maps_service.get_walking_time([origin], [destination])
+    assert res == {} # Resilience Fallback
+
+

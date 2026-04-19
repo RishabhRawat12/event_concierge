@@ -13,7 +13,7 @@ def find_string(root_dir, target):
                     for i, line in enumerate(f, 1):
                         if target in line:
                             print(f"Found in {path}:{i}: {line.strip()}")
-            except Exception as e:
+            except Exception:
                 pass
 
 if __name__ == "__main__":

@@ -1,6 +1,4 @@
 import asyncio
-import os
-import json
 from services.gemini import gemini_service
 from schemas.models import UserConstraints, Coordinates
 from dotenv import load_dotenv

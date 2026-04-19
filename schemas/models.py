@@ -1,48 +1,73 @@
-from pydantic import BaseModel, Field, StringConstraints, model_validator
-from typing import List, Optional, Annotated
+"""
+Data models for the Event Concierge platform.
+Enforces strict validation and schema integrity for Attendee and Staff flows.
+"""
 from datetime import datetime
+from typing import Annotated, List, Optional
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 class Coordinates(BaseModel):
+    """Geographic coordinates for spatial grounding."""
+    model_config = ConfigDict(populate_by_name=True, frozen=True)
+
     latitude: float = Field(..., ge=-90, le=90, description="Latitude of the location")
     longitude: float = Field(..., ge=-180, le=180, description="Longitude of the location")
 
 class UserConstraints(BaseModel):
-    user_location: Coordinates
-    start_time: str = Field(..., pattern=r"^\d{1,2}:\d{2} [AP]M$", description="Start time (e.g. 10:00 AM)")
-    end_time: str = Field(..., pattern=r"^\d{1,2}:\d{2} [AP]M$", description="End time (e.g. 05:00 PM)")
-    preferred_topics: List[Annotated[str, StringConstraints(min_length=2, max_length=50)]] = Field(..., min_length=1)
+    """Input constraints for agentic itinerary generation."""
+    model_config = ConfigDict(populate_by_name=True, frozen=True)
+
+    user_location: Coordinates = Field(..., description="The attendee's current spatial origin")
+    start_time: str = Field(..., pattern=r"^\d{1,2}:\d{2} [AP]M$", description="Itinerary start window (e.g. 10:00 AM)")
+    end_time: str = Field(..., pattern=r"^\d{1,2}:\d{2} [AP]M$", description="Itinerary end window (e.g. 05:00 PM)")
+    preferred_topics: List[Annotated[str, StringConstraints(min_length=2, max_length=50)]] = Field(
+        ..., min_length=1, description="Topical interests for event filtering"
+    )
 
     @model_validator(mode='after')
     def validate_time_sequence(self) -> 'UserConstraints':
+        """Ensures the chronological integrity of the event window."""
         fmt = "%I:%M %p"
         try:
             start = datetime.strptime(self.start_time, fmt)
             end = datetime.strptime(self.end_time, fmt)
             if start >= end:
-                raise ValueError("start_time must be strictly before end_time")
+                raise ValueError("The start_time must be chronologically before the end_time.")
         except ValueError as e:
             if "start_time" in str(e):
                 raise e
-            # If parsing fails, it should have been caught by regex, but we handle it just in case
             raise ValueError(f"Invalid time format. Expected 'HH:MM AM/PM', got '{self.start_time}' or '{self.end_time}'")
         return self
 
 class Event(BaseModel):
-    event_name: str = Field(..., description="Name of the chosen event from the static mock events list")
-    start_time: str = Field(..., description="Start time formatted appropriately (e.g. 10:00 AM)")
-    end_time: str = Field(..., description="End time formatted appropriately (e.g. 11:30 AM)")
-    walking_directions: str = Field(..., description="Brief summary of how to get there based on the location")
-    transition_time_seconds: int = Field(..., description="Allocated transition time in seconds based on Maps API distance matrix")
+    """Representation of a conference event with spatial transition data."""
+    model_config = ConfigDict(populate_by_name=True, frozen=True)
+
+    event_name: str = Field(..., description="Canonical name of the event")
+    start_time: str = Field(..., description="Formatted event start time")
+    end_time: str = Field(..., description="Formatted event end time")
+    walking_directions: str = Field(..., description="Pathfinding narration between venues")
+    transition_time_seconds: int = Field(..., ge=0, description="Allocated walking buffer in seconds")
 
 class ItineraryResponse(BaseModel):
-    current_weather: Optional[str] = Field(default=None, description="The prevailing weather during the itinerary calculation")
-    itinerary: List[Event] = Field(..., description="Ordered list of events forming the optimal, conflict-free itinerary")
-    simulated: bool = Field(default=False, description="True if hit with quota limits and result is locally simulated.")
+    """The final AI-orchestrated attendee schedule."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    current_weather: Optional[str] = Field(default=None, description="Metereological context for navigation")
+    itinerary: List[Event] = Field(..., description="Chronological, conflict-free event sequence")
+    simulated: bool = Field(default=False, description="Indicator for deterministic fallback results")
 
 class StaffActionRequest(BaseModel):
-    zone_id: str = Field(..., description="The unique identifier for the targeted Zone (e.g. Zone B)")
-    alert_type: str = Field(..., description="The categorical metric anomaly driving the alert (e.g. Crowd Density)")
+    """Tactical alert request from venue sensors or staff interface."""
+    model_config = ConfigDict(populate_by_name=True, frozen=True)
+
+    zone_id: str = Field(..., description="Target zone identifier (e.g. 'Zone B')")
+    alert_type: str = Field(..., description="Metric driving the tactical deployment (e.g. 'Crowd Density')")
 
 class StaffActionResponse(BaseModel):
-    protocol: str = Field(..., description="The AI-orchestrated response protocol for personnel deployment")
-    simulated: bool = Field(default=False, description="True if hit with quota limits and result is locally simulated.")
+    """Tactical protocol generated by the orchestration engine."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    protocol: str = Field(..., description="Narrated personnel deployment instructions")
+    simulated: bool = Field(default=False, description="Indicator for deterministic fallback results")
+

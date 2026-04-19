@@ -1,6 +1,5 @@
 import asyncio
 from google import genai
-import os
 
 async def check():
     client = genai.Client(api_key="TEST")

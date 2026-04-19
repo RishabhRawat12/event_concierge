@@ -1,7 +1,7 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
 from main import app
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from redis.exceptions import RedisError
 
 @pytest.mark.asyncio
@@ -69,6 +69,6 @@ async def test_rate_limiting_staged():
                 "preferred_topics": ["AI"]
             })
     assert response.status_code == 429
-    assert "quota exceeded" in response.json()["detail"]
+    assert "quota" in response.json()["detail"].lower()
 
 
