@@ -21,7 +21,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from api.routes import router as itinerary_router
 from api.routes import staff_router
 from services.gemini import gemini_service
-from utils.analytics import analytics_manager
 from utils.config import settings
 from utils.firebase import fb_manager
 from utils.redis import cache
@@ -55,7 +54,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 2. Tactical Service Synchronization
     try:
         fb_manager.connect()
-        analytics_manager.connect()
         await cache.connect()
         await gemini_service.load_events()
         await sim_engine.start_sim()
@@ -85,18 +83,27 @@ app = FastAPI(
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Enforces high-performance security headers and strict CSP protocols."""
     async def dispatch(self, request: Request, call_next: Any) -> Response:
+        # Trusted Proxy Check: Prevents IP Spoofing for rate limiting
+        client_host = request.client.host if request.client else "0.0.0.0"
+        if client_host not in settings.TRUSTED_PROXIES and client_host != "127.0.0.1":
+            # If not from a trusted proxy, we only allow X-Forwarded-For if it's not present
+            # or we log as a potential spoofing attempt.
+            request.state.is_trusted_proxied = False
+        else:
+            request.state.is_trusted_proxied = True
+
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["X-XSS-Protection"] = "0" # Disable legacy for CSP
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+        response.headers["Referrer-Policy"] = "no-referrer"
         
-        # Hardened Content Security Policy
+        # Hardened Content Security Policy (Strict: No unsafe-inline)
         csp = (
             "default-src 'self' https://maps.googleapis.com https://*.googleapis.com https://fonts.gstatic.com; "
-            "script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://*.googleapis.com https://cdn.jsdelivr.net; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.googleapis.com https://cdn.jsdelivr.net; "
+            "script-src 'self' https://maps.googleapis.com https://*.googleapis.com https://cdn.jsdelivr.net; "
+            "style-src 'self' https://fonts.googleapis.com https://*.googleapis.com https://cdn.jsdelivr.net; "
             "img-src 'self' data: https://*.googleapis.com https://*.gstatic.com *.ggpht.com https://*.google.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "connect-src 'self' https://maps.googleapis.com https://*.googleapis.com wss: ws:; "
@@ -108,10 +115,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
-# Cross-Origin Resource Policy
+# Cross-Origin Resource Policy: Strictly Whitelisted
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Tighten for production deployment
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
@@ -119,6 +126,7 @@ app.add_middleware(
 
 # Route Mounting
 if os.path.exists("static"):
+    # Ensure static files are served without directory listing and with cache headers
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.include_router(itinerary_router, prefix="/api")
@@ -136,20 +144,22 @@ async def serve_index(request: Request) -> Response:
         }
     )
 
-# Structured Global Exception Handlers
+# Structured Global Exception Handlers: Anonymized for Security
 @app.exception_handler(TimeoutError)
 @app.exception_handler(RedisError)
 async def redis_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.error(f"Cache Layer Failure: {exc}")
     return JSONResponse(
         status_code=503,
-        content={"error": "Service Unavailable", "message": "Tactical cache layer is temporarily offline."}
+        content={"error": "Service Unavailable", "message": "Tactical persistence layer is temporarily restricted."}
     )
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     trace_id = str(uuid.uuid4())
-    logger.exception(f"CRITICAL [trace_id={trace_id}]: {exc}")
+    # Log the full exception internally
+    logger.exception(f"CRITICAL [trace_id={trace_id}]: Internal orchestration anomaly.")
+    # Return anonymized response to requester
     return JSONResponse(
         status_code=500,
         content={

@@ -4,7 +4,13 @@ Implements a weighted Dijkstra algorithm for conflict-free venue navigation.
 """
 import heapq
 import math
+import hashlib
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 class DijkstraRouter:
     """Computes optimal pedestrian paths across high-density architectural zones."""
@@ -60,16 +66,27 @@ class DijkstraRouter:
         congestion_map: Optional[Dict[str, float]] = None
     ) -> Tuple[List[str], float]:
         """
-        Executes a weighted search for the shortest path between two event nodes.
-
-        Args:
-            start_id: Identifier for the origin node.
-            end_id: Identifier for the destination node.
-            congestion_map: Optional mapping of zone IDs to metric penalties.
-
-        Returns:
-            Tuple containing the ordered list of event IDs and the total weighted distance.
+        Executes a weighted search with state-aware memoization.
         """
+        # Generate a deterministic hash for the congestion state
+        congestion_hash = ""
+        if congestion_map:
+            # Sort keys for deterministic hashing
+            state_str = "|".join(f"{k}:{v}" for k, v in sorted(congestion_map.items()))
+            congestion_hash = hashlib.blake2b(state_str.encode(), digest_size=8).hexdigest()
+        
+        return self._find_path_memoized(start_id, end_id, congestion_hash, tuple(sorted(congestion_map.items())) if congestion_map else ())
+
+    @lru_cache(maxsize=1024)
+    def _find_path_memoized(
+        self, 
+        start_id: str, 
+        end_id: str, 
+        state_hash: str,
+        state_tuple: Tuple[Tuple[str, float], ...]
+    ) -> Tuple[List[str], float]:
+        """Inner Dijkstra implementation wrapped in LRU cache."""
+        congestion_map = dict(state_tuple) if state_tuple else None
         if start_id not in self._graph or end_id not in self._graph:
             return [], 0.0
 

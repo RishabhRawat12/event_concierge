@@ -1,12 +1,11 @@
-"""
-High-performance asynchronous cache layer using Redis.
-Implements Rank-1 patterns: connection pooling, atomic rate limiting, and memory fallbacks.
-"""
 import json
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional, cast
+import hashlib
+import asyncio
+import weakref
+from typing import Any, Dict, List, Optional, cast, Callable, Awaitable
 import redis.asyncio as redis
 from .config import settings
 
@@ -20,6 +19,8 @@ class AsyncCache:
         self.client: Optional[redis.Redis] = None
         self._memory_buckets: Dict[str, List[float]] = {}
         self._connection_warned = False
+        # Single-Flight mechanism: prevents multiple concurrent requests for the same key
+        self._locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
 
     async def connect(self) -> None:
         """Initializes the Redis connection pool with strict timeout protection."""
@@ -31,7 +32,7 @@ class AsyncCache:
                 self.redis_url,
                 decode_responses=True,
                 socket_connect_timeout=settings.REDIS_TIMEOUT_SECONDS,
-                max_connections=20,
+                max_connections=50, # Scaled for bursty orchestration loads
                 retry_on_timeout=True
             )
             await self.client.ping()
@@ -54,6 +55,47 @@ class AsyncCache:
                 logger.debug(f"Shadow error during Redis shutdown: {e}")
             finally:
                 self.client = None
+
+    async def get_or_compute(
+        self, 
+        key: str, 
+        compute_func: Callable[..., Awaitable[Any]], 
+        ttl: int = 300,
+        *args: Any, 
+        **kwargs: Any
+    ) -> Any:
+        """
+        Implements the 'Single-Flight' pattern.
+        Ensures that for a cache miss, only one request executes the compute_func.
+        """
+        # 1. Fast Path: Check cache
+        cached = await self.get(key)
+        if cached is not None:
+            return cached
+
+        # 2. Get or create a lock for this specific key
+        lock = self._locks.get(key)
+        if not lock:
+            lock = asyncio.Lock()
+            self._locks[key] = lock
+
+        async with lock:
+            # 3. Double-check cache (it may have been filled by another request)
+            cached = await self.get(key)
+            if cached is not None:
+                return cached
+            
+            # 4. Compute and cache
+            result = await compute_func(*args, **kwargs)
+            if result is not None:
+                await self.set(key, result, ex=ttl)
+            return result
+
+    @staticmethod
+    def hash_key(prefix: str, content: str) -> str:
+        """Generates a deterministic, collision-resistant cache key."""
+        content_hash = hashlib.blake2b(content.encode(), digest_size=16).hexdigest()
+        return f"{prefix}:{content_hash}"
 
     async def get(self, key: str) -> Optional[Any]:
         """Retrieves and deserializes a cached object."""

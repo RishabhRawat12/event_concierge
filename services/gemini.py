@@ -6,7 +6,7 @@ Includes a 'Shadow-Engine Fallback' for 100% service uptime during high-concurre
 import json
 import logging
 import random
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Set, cast
 import aiofiles # type: ignore
 from google import genai
 from google.genai import types
@@ -25,15 +25,35 @@ class GeminiService:
         self._model_id: str = "gemini-flash-latest"
         self._mock_events: List[Dict[str, Any]] = []
         self._router: Optional[DijkstraRouter] = None
+        # Efficient Indexing
+        self._exact_index: Dict[str, List[Dict[str, Any]]] = {}
+        self._token_index: Dict[str, List[int]] = {}
 
     async def load_events(self) -> None:
-        """Loads static event data and synchronizes the spatial graph router."""
+        """Loads static event data and synchronizes situational search indices."""
         try:
             async with aiofiles.open("mock_events.json", mode="r") as f:
                 content = await f.read()
                 self._mock_events = json.loads(content)
+            
+            # Initialize indices for O(1) retrieval
+            self._exact_index = {}
+            self._token_index = {}
+            for i, event in enumerate(self._mock_events):
+                # 1. Exact Topic/Name Index
+                name_key = event["name"].lower()
+                topic_key = event["topic"].lower()
+                self._exact_index.setdefault(name_key, []).append(event)
+                self._exact_index.setdefault(topic_key, []).append(event)
+
+                # 2. Tokenized Fuzzy Index (Deduplicated)
+                tokens = set(name_key.split()) | set(topic_key.split())
+                for token in tokens:
+                    if len(token) > 2: # Ignore tiny noise tokens
+                        self._token_index.setdefault(token, []).append(i)
+
             self._router = DijkstraRouter(self._mock_events)
-            logger.info("Tactical Event Graph synchronized and Router active.")
+            logger.info("Tactical Event Graph and Search Indices synchronized.")
         except Exception as e:
             logger.error(f"Critical operational failure loading events: {e}")
             self._mock_events = []
@@ -103,13 +123,33 @@ class GeminiService:
         })
 
     def search_events(self, query: str) -> str:
-        """Registry filtering tool for event discovery."""
-        q = query.lower()
-        results = [
-            e for e in self._mock_events 
-            if q in e["name"].lower() or q in e["topic"].lower()
-        ]
-        return json.dumps({"events": results[:5]})
+        """High-performance registry filtering via situational indices."""
+        q = query.lower().strip()
+        if not q:
+            return json.dumps({"events": []})
+
+        # 1. Exact Index Match (O(1))
+        if q in self._exact_index:
+            return json.dumps({"events": self._exact_index[q][:5]})
+
+        # 2. Multi-token Intersection (O(T) where T = tokens)
+        tokens = [t for t in q.split() if len(t) > 2]
+        if not tokens: # Fallback to short tokens if query is small
+            tokens = q.split()
+
+        matches: Set[int] = set()
+        for i, token in enumerate(tokens):
+            token_hits = set(self._token_index.get(token, []))
+            if i == 0:
+                matches = token_hits
+            else:
+                matches &= token_hits
+            if not matches:
+                break
+
+        # 3. Formulate and Limit
+        results = [self._mock_events[idx] for idx in list(matches)[:5]]
+        return json.dumps({"events": results})
 
     async def generate_itinerary(
         self, 

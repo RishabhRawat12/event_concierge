@@ -6,146 +6,7 @@
     <title>Event Concierge - Agentic AI Platform</title>
     <meta name="description" content="Production-ready multi-persona orchestration for physical event experiences.">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --bg: #0f172a;
-            --card: #1e293b;
-            --text: #f8fafc;
-            --text-muted: #94a3b8;
-            --danger: #ef4444;
-            --success: #22c55e;
-            --warning: #f59e0b;
-        }
-
-        * { box-sizing: border-box; }
-
-        body {
-            font-family: 'Outfit', sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-        .skip-link {
-            position: absolute;
-            top: -40px;
-            left: 0;
-            background: var(--primary);
-            color: white;
-            padding: 8px;
-            z-index: 100;
-            transition: top 0.3s;
-        }
-        .skip-link:focus { top: 0; }
-
-        header {
-            padding: 2.5rem 1rem;
-            text-align: center;
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-
-        h1 { 
-            margin: 0; 
-            font-size: 2.5rem; 
-            font-weight: 800; 
-            background: linear-gradient(to right, #818cf8, #c084fc); 
-            -webkit-background-clip: text; 
-            background-clip: text; 
-            -webkit-text-fill-color: transparent; 
-        }
-        header p { color: var(--text-muted); margin-top: 0.5rem; font-size: 1.1rem; }
-
-        .container {
-            max-width: 1600px;
-            width: 95%;
-            margin: 0 auto;
-            padding: 2rem;
-            display: grid;
-            grid-template-columns: minmax(350px, 450px) 1fr;
-            gap: 2rem;
-            flex-grow: 1;
-        }
-
-        .card {
-            background: var(--card);
-            border-radius: 1.25rem;
-            padding: 2rem;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-            border: 1px solid rgba(255,255,255,0.05);
-            height: fit-content;
-        }
-
-        h2 { font-size: 1.35rem; margin-top: 0; margin-bottom: 1.25rem; border-left: 4px solid var(--primary); padding-left: 0.75rem; }
-
-        .form-group { margin-bottom: 1.25rem; }
-        label { display: block; margin-bottom: 0.4rem; font-weight: 600; color: var(--text-muted); font-size: 0.9rem; }
-
-        input, select, button {
-            width: 100%;
-            padding: 0.8rem;
-            border-radius: 0.75rem;
-            border: 1px solid #334155;
-            background: #0f172a;
-            color: white;
-            font-size: 1rem;
-            font-family: inherit;
-            transition: all 0.2s;
-        }
-
-        button {
-            background: var(--primary);
-            border: none;
-            cursor: pointer;
-            font-weight: 600;
-            margin-top: 1rem;
-        }
-
-        button:hover { background: var(--primary-dark); transform: translateY(-1px); }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        #map {
-            height: 750px;
-            width: 100%;
-            border-radius: 1.25rem;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .itinerary-item {
-            border-left: 3px solid var(--primary);
-            padding: 1rem;
-            margin-bottom: 1rem;
-            background: rgba(255,255,255,0.02);
-            border-radius: 0.5rem;
-        }
-
-        .alert-box {
-            background: rgba(239, 68, 68, 0.05);
-            border: 1px solid rgba(239, 68, 68, 0.15);
-            padding: 1rem;
-            border-radius: 0.75rem;
-            margin-top: 1rem;
-            font-size: 0.9rem;
-        }
-
-        .live-insight-item {
-            display: flex; 
-            justify-content: space-between; 
-            padding: 0.5rem 0; 
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-
-        @media (max-width: 1024px) {
-            .container { grid-template-columns: 1fr; }
-            #map { height: 500px; }
-        }
-    </style>
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -154,11 +15,14 @@
         <p>Agentic Orchestration & Real-time Venue Insights</p>
     </header>
 
-    <main id="main-content" class="container">
+    <main id="main-content" class="container" tabindex="-1">
         <aside class="sidebar" style="display: flex; flex-direction: column; gap: 1.5rem;">
             <section class="card" aria-labelledby="form-title">
                 <h2 id="form-title">Generate Optimized Plan</h2>
-                <form id="itineraryForm">
+                <!-- Error Summary: Quantified feedback injected via JS -->
+                <div id="error-summary" aria-labelledby="summary-title" role="alert" tabindex="-1" style="display: none;"></div>
+                
+                <form id="itineraryForm" novalidate>
                     <div class="form-group">
                         <label for="startTime">Start Time</label>
                         <input type="text" id="startTime" value="09:00 AM" aria-required="true">
@@ -183,8 +47,9 @@
             <section id="itinerarySection" class="card" style="display: none;" aria-live="polite">
                 <div id="itineraryBadge" style="display: none; background: var(--warning); color: black; font-size: 0.7rem; padding: 0.2rem 0.6rem; border-radius: 1rem; float: right; font-weight: 800; margin-top: -1.5rem;">RESILIENCE MODE</div>
                 <h2>Optimized Schedule</h2>
-                <div id="weatherInfo"></div>
-                <div id="itineraryContent"></div>
+                <div id="weatherInfo" role="status"></div>
+                <!-- Itinerary Registry: Visible categorized list replaces flat container -->
+                <div id="itineraryContent" class="event-registry"></div>
             </section>
 
             <section class="card" aria-labelledby="staff-title">
@@ -192,160 +57,29 @@
                 <div id="live-feed" role="status" aria-live="polite" style="max-height: 150px; overflow-y: auto; font-size: 0.85rem; color: var(--text-muted);">
                     <p>Scanning sensor network...</p>
                 </div>
-                <div id="staffAlert" class="alert-box" aria-live="assertive" role="alert">
+                <div id="staffAlert" class="alert-box" aria-live="assertive" role="alert" aria-atomic="true">
                     Awaiting operational priorities...
                 </div>
                 <div class="form-group" style="margin-top: 1rem;">
                     <label for="staffToken">Authorization Token</label>
-                    <input type="password" id="staffToken" placeholder="Emergency Token">
+                    <input type="password" id="staffToken" placeholder="Emergency Token" aria-required="true">
                 </div>
-                <button type="button" style="background: var(--danger);" id="trigger-staff-btn">Initiate Tactical Protocol</button>
-                <a href="https://lookerstudio.google.com/" target="_blank" style="display: block; margin-top: 1rem; color: var(--primary); text-decoration: none; font-size: 0.8rem; text-align: center;">↗ Enterprise Analytics Dashboard</a>
+                <button type="button" style="background: var(--danger); min-height: 44px;" id="trigger-staff-btn">Initiate Tactical Protocol</button>
+                <a href="https://lookerstudio.google.com/" target="_blank" aria-label="Enterprise Analytics Dashboard (opens in new tab)" style="display: block; margin-top: 1rem; color: var(--primary); text-decoration: none; font-size: 0.8rem; text-align: center;">↗ Enterprise Analytics Dashboard</a>
             </section>
         </aside>
 
         <section class="map-view" aria-labelledby="map-title">
             <div class="card">
                 <h2 id="map-title">Visual Digital Twin</h2>
-                <div id="map" role="application" aria-label="Interactive Venue Map"></div>
+                <!-- Map isolated for accessibility; Registry List is the primary interface -->
+                <div id="map" role="presentation" aria-hidden="true" tabindex="-1"></div>
             </div>
         </section>
     </main>
 
     <script id="events-data" type="application/json">{{ events | tojson | safe }}</script>
-    <script>
-        let map;
-        const eventData = JSON.parse(document.getElementById('events-data').textContent);
-        
-        async function initMap() {
-            try {
-                const { Map, InfoWindow } = await google.maps.importLibrary("maps");
-                const { AdvancedMarkerElement, PinElement } = await google.maps.importLibrary("marker");
-
-                map = new Map(document.getElementById("map"), {
-                    center: { lat: 37.784, lng: -122.401 },
-                    zoom: 16,
-                    mapId: "DEMO_MAP_ID",
-                    styles: [
-                        { "featureType": "all", "elementType": "geometry", "stylers": [{"color": "#1e293b"}] },
-                        { "featureType": "all", "elementType": "labels.text.fill", "stylers": [{"color": "#94a3b8"}] }
-                    ]
-                });
-
-                new google.maps.Polygon({
-                    paths: [
-                        { lat: 37.784261, lng: -122.401344 },
-                        { lat: 37.785261, lng: -122.401344 },
-                        { lat: 37.785261, lng: -122.400344 },
-                        { lat: 37.784261, lng: -122.400344 }
-                    ],
-                    strokeColor: "#6366f1",
-                    strokeOpacity: 0.8,
-                    strokeWeight: 2,
-                    fillColor: "#6366f1",
-                    fillOpacity: 0.1,
-                    map: map
-                });
-
-                const infoWindow = new InfoWindow();
-                if (Array.isArray(eventData)) {
-                    eventData.forEach(event => {
-                        const marker = new AdvancedMarkerElement({
-                            position: { lat: event.latitude, lng: event.longitude },
-                            map: map,
-                            title: event.name
-                        });
-                        marker.addListener("click", () => {
-                            infoWindow.setContent(`<div style="color: #334155;"><strong>${event.name}</strong><br>${event.topic}</div>`);
-                            infoWindow.open(marker.map, marker);
-                        });
-                    });
-                }
-            } catch (err) { console.error("Map initialization failed. Falling back to static view.", err); }
-        }
-
-        const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`);
-        ws.onmessage = (e) => {
-            const data = JSON.parse(e.data);
-            if (data.alert_type) {
-                const box = document.getElementById('staffAlert');
-                box.style.background = 'rgba(239, 68, 68, 0.1)';
-                box.style.color = '#fca5a5';
-                const badge = data.simulated ? '<span style="background: var(--warning); color: black; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.7rem;">SIMULATED</span> ' : '';
-                box.innerHTML = `<strong>🚨 ${data.zone_id} ALERT</strong> ${badge}<br>${data.protocol}`;
-            } else {
-                const feed = document.getElementById('live-feed');
-                feed.innerHTML = `<div class="live-insight-item"><span>${data.zone}</span><span style="color: ${data.level > 80 ? 'var(--danger)' : 'var(--success)'}">${data.level}%</span></div>` + feed.innerHTML;
-            }
-        };
-
-        document.getElementById('itineraryForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const btn = document.getElementById('submitBtn');
-            btn.setAttribute('aria-busy', 'true');
-            btn.disabled = true; btn.textContent = 'Computing Optimal Path...';
-
-            try {
-                const res = await fetch('/api/itinerary', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        user_location: { latitude: 37.7749, longitude: -122.4194 },
-                        start_time: document.getElementById('startTime').value,
-                        end_time: document.getElementById('endTime').value,
-                        preferred_topics: Array.from(document.getElementById('interests').selectedOptions).map(o => o.value)
-                    })
-                });
-                const data = await res.json();
-                
-                if (res.ok && data.itinerary) {
-                    document.getElementById('itineraryBadge').style.display = data.simulated ? 'block' : 'none';
-                    const container = document.getElementById('itineraryContent');
-                    container.innerHTML = '';
-                    data.itinerary.forEach(item => {
-                        const div = document.createElement('article');
-                        div.className = 'itinerary-item';
-                        div.innerHTML = `<h3>${item.event_name}</h3><p>${item.start_time} - ${item.end_time}</p><p style="font-size: 0.85rem; opacity: 0.8;">${item.walking_directions}</p>`;
-                        container.appendChild(div);
-                    });
-                    document.getElementById('itinerarySection').style.display = 'block';
-                } else {
-                    alert(`⚠️ System Note: ${data.message || data.error || "Retry orchestration."}`);
-                }
-            } catch (err) { 
-                alert("Connection status: Interrupted. Check local network.");
-            }
-            finally { 
-                btn.disabled = false; 
-                btn.textContent = 'Compute Itinerary';
-                btn.setAttribute('aria-busy', 'false');
-            }
-        });
-
-        document.getElementById('trigger-staff-btn').addEventListener('click', async () => {
-            const btn = document.getElementById('trigger-staff-btn');
-            const token = document.getElementById('staffToken').value;
-            if (!token) return alert('Token required for secure orchestration.');
-            
-            btn.disabled = true;
-            btn.textContent = 'Orchestrating Protocol...';
-            
-            try {
-                const res = await fetch('/api/staff/zone-action', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                    body: JSON.stringify({ zone_id: "Main Entrance", alert_type: "Emergency" })
-                });
-                const data = await res.json();
-                if (!res.ok) alert(`⚠️ Command Error: ${data.message || data.error}`);
-            } catch (err) {
-                alert("Tactical link failed.");
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Initiate Tactical Protocol';
-            }
-        });
-    </script>
+    <script src="/static/app.js"></script>
     <script async src="https://maps.googleapis.com/maps/api/js?key={{ maps_key }}&callback=initMap"></script>
 </body>
 </html>
