@@ -11,7 +11,7 @@ router = APIRouter(tags=["Attendee Flow"])
 async def attendee_rate_limit(request: Request) -> None:
     """Standardized Validation: Rate limit attendee requests."""
     ip = request.client.host if request.client else "0.0.0.0"
-    if await cache.is_rate_limited(f"ratelimit:attendee:{ip}", capacity=10, window=60):
+    if await cache.is_rate_limited(f"ratelimit:attendee:{ip}", capacity=settings.ATTENDEE_RATE_LIMIT_CAPACITY, window=60):
         raise HTTPException(status_code=429, detail="Attendee quota exhausted.")
 
 @router.post("/itinerary", response_model=ItineraryResponse, dependencies=[Depends(attendee_rate_limit)])

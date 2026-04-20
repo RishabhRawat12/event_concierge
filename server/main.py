@@ -55,7 +55,9 @@ app = FastAPI(
     title="Event Concierge Service",
     description="Real-time venue orchestration with Vertex AI grounding.",
     version="3.1.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc"
 )
 
 # Middleware Setup
@@ -78,6 +80,10 @@ setup_exception_handlers(app)
 
 if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/", include_in_schema=False)
+async def api_root():
+    return {"status": "synchronized", "service": "Event Concierge API"}
 
 @app.get("/health")
 async def health_check():

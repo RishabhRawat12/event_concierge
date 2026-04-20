@@ -30,6 +30,9 @@ class SpatialRouterService:
         
         try:
             path, dist = self._router.find_optimal_path(start_event_id, end_event_id)
+            if path and str(path[0]).startswith("error"):
+                return json.dumps({"error": path[0], "status": "error"})
+                
             return json.dumps({
                 "path": path, 
                 "total_distance_km": round(dist, 2),

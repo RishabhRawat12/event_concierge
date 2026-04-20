@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     BIGQUERY_DATASET: str = "event_analytics"
 
     # Infrastructure & Access Control
+    ATTENDEE_RATE_LIMIT_CAPACITY: int = 100000
     ALLOWED_ORIGINS: Any = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://127.0.0.1:5173"]
     TRUSTED_PROXIES: Any = ["127.0.0.1"]
 

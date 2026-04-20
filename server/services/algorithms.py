@@ -87,8 +87,10 @@ class DijkstraRouter:
     ) -> Tuple[List[str], float]:
         """Inner Dijkstra implementation wrapped in LRU cache."""
         congestion_map = dict(state_tuple) if state_tuple else None
-        if start_id not in self._graph or end_id not in self._graph:
-            return [], 0.0
+        if start_id not in self._graph:
+            return ["error: start_id not in graph"], -1.0
+        if end_id not in self._graph:
+            return ["error: end_id not in graph"], -1.0
 
         # Min-heap queue: (cumulative_weight, current_id, path_sequence)
         pq: List[Tuple[float, str, List[str]]] = [(0.0, start_id, [start_id])]

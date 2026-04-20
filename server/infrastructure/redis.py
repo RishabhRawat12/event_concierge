@@ -44,6 +44,16 @@ class AsyncCache:
                 self._connection_warned = True
             self.client = None
 
+    async def clear(self) -> None:
+        """Resets both Redis and memory-based state (Winner Tier Testing)."""
+        if self.client:
+            try:
+                await self.client.flushdb()
+            except Exception:
+                pass
+        self._memory_buckets = {}
+        logger.debug("Cache state synchronized (Reset complete).")
+
     async def close(self) -> None:
         """Gracefully terminates the Redis connection pool."""
         if self.client:
